@@ -33,7 +33,7 @@
 
           <label>
             房间号
-            <input id="room_id" name="room_id" type="text" placeholder="例如 6 或 262229562462" required />
+            <input id="room_id" name="room_id" type="text" placeholder="例如 6 或 262229562462" />
           </label>
 
           <label id="custom-url-wrap" class="hidden">
@@ -129,9 +129,18 @@
             <div><dt>直播页URL</dt><dd id="room_url">-</dd></div>
             <div><dt>流地址</dt><dd id="stream_url">-</dd></div>
             <div><dt>最近帧时间</dt><dd id="last_frame_at">-</dd></div>
+            <div><dt>预览更新时间</dt><dd id="last_preview_at">-</dd></div>
             <div><dt>最近错误</dt><dd id="last_error">-</dd></div>
           </dl>
         </article>
+      </section>
+
+      <section class="panel">
+        <h2>实时画面</h2>
+        <div class="preview-wrap">
+          <img id="live-frame" alt="实时画面预览" />
+          <p id="frame-status" class="preview-tip">未开始监视</p>
+        </div>
       </section>
 
       <section class="panel">

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class StartMonitorRequest(BaseModel):
     platform: Literal["bilibili", "douyin", "custom"] = "bilibili"
-    room_id: str = Field(..., min_length=1, max_length=128)
+    room_id: str | None = Field(default=None, max_length=128)
     quality: str = Field(default="best", min_length=1, max_length=32)
     scan_interval_ms: int = Field(default=500, ge=100, le=5000)
     custom_url: str | None = Field(default=None, max_length=1024)
@@ -20,11 +20,11 @@ class StartMonitorRequest(BaseModel):
 
     @field_validator("room_id")
     @classmethod
-    def strip_room_id(cls, value: str) -> str:
+    def strip_room_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
         value = value.strip()
-        if not value:
-            raise ValueError("room_id cannot be empty")
-        return value
+        return value or None
 
     @field_validator("quality")
     @classmethod
@@ -68,6 +68,11 @@ class StartMonitorRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_login_fields(self) -> "StartMonitorRequest":
+        if self.platform in {"bilibili", "douyin"} and not self.room_id:
+            raise ValueError("room_id is required for bilibili/douyin")
+        if self.platform == "custom" and not self.custom_url:
+            raise ValueError("custom_url is required when platform is custom")
+
         if not self.enable_scan_login:
             return self
 

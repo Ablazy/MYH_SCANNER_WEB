@@ -2,6 +2,7 @@ const form = document.getElementById("monitor-form");
 const platformSelect = document.getElementById("platform");
 const customUrlWrap = document.getElementById("custom-url-wrap");
 const customUrlInput = document.getElementById("custom_url");
+const roomIdInput = document.getElementById("room_id");
 const enableScanLoginInput = document.getElementById("enable_scan_login");
 const serverTypeInput = document.getElementById("server_type");
 const uidInput = document.getElementById("uid");
@@ -11,6 +12,8 @@ const serverTypeWrap = document.getElementById("server-type-wrap");
 const uidWrap = document.getElementById("uid-wrap");
 const tokenWrap = document.getElementById("token-wrap");
 const usernameWrap = document.getElementById("username-wrap");
+const liveFrameImage = document.getElementById("live-frame");
+const frameStatus = document.getElementById("frame-status");
 const logBox = document.getElementById("event-log");
 
 const fields = {
@@ -29,6 +32,7 @@ const fields = {
   room_url: document.getElementById("room_url"),
   stream_url: document.getElementById("stream_url"),
   last_frame_at: document.getElementById("last_frame_at"),
+  last_preview_at: document.getElementById("last_preview_at"),
   last_error: document.getElementById("last_error"),
 };
 
@@ -38,6 +42,7 @@ const refreshButton = document.getElementById("refresh-btn");
 
 let ws = null;
 let wsTimer = null;
+let frameTimer = null;
 
 function textOrDash(value) {
   if (value === null || value === undefined || value === "") {
@@ -102,7 +107,14 @@ function applyStatus(status) {
   fields.room_url.textContent = textOrDash(status.room_url);
   fields.stream_url.textContent = textOrDash(status.stream_url);
   fields.last_frame_at.textContent = formatTime(status.last_frame_at);
+  fields.last_preview_at.textContent = formatTime(status.last_preview_at);
   fields.last_error.textContent = textOrDash(status.last_error);
+
+  if (status.running) {
+    startFramePolling();
+  } else {
+    stopFramePolling("未开始监视");
+  }
 }
 
 async function callApi(path, init) {
@@ -231,6 +243,12 @@ function updateCustomUrlVisibility() {
   const isCustom = platformSelect.value === "custom";
   customUrlWrap.classList.toggle("hidden", !isCustom);
   customUrlInput.required = isCustom;
+  roomIdInput.required = !isCustom;
+  if (isCustom) {
+    roomIdInput.placeholder = "自定义URL模式下可留空";
+  } else {
+    roomIdInput.placeholder = "例如 6 或 262229562462";
+  }
 }
 
 function updateScanLoginVisibility() {
@@ -246,6 +264,40 @@ function updateScanLoginVisibility() {
   tokenInput.required = enabled;
   usernameInput.required = enabled && isBh3;
 }
+
+function refreshFrame() {
+  const ts = Date.now();
+  liveFrameImage.src = `/api/monitor/frame?ts=${ts}`;
+}
+
+function startFramePolling() {
+  if (frameTimer) {
+    return;
+  }
+  frameStatus.textContent = "正在拉取实时画面...";
+  refreshFrame();
+  frameTimer = setInterval(refreshFrame, 450);
+}
+
+function stopFramePolling(message) {
+  if (frameTimer) {
+    clearInterval(frameTimer);
+    frameTimer = null;
+  }
+  liveFrameImage.removeAttribute("src");
+  frameStatus.textContent = message;
+}
+
+liveFrameImage.addEventListener("load", () => {
+  if (liveFrameImage.naturalWidth > 0 && liveFrameImage.naturalHeight > 0) {
+    liveFrameImage.style.aspectRatio = `${liveFrameImage.naturalWidth} / ${liveFrameImage.naturalHeight}`;
+  }
+  frameStatus.textContent = "实时画面正常";
+});
+
+liveFrameImage.addEventListener("error", () => {
+  frameStatus.textContent = "等待首帧...";
+});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

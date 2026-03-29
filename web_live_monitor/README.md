@@ -9,6 +9,7 @@
 - 后端使用 OpenCV 实时识别二维码并提取：
   - `game_code`（兼容原项目规则：`8F3` / `9E&` / `8F%` / `%BA`）
   - `ticket`（末尾 24 位）
+- 扫码实现与原项目一致：`opencv wechat_qrcode + ScanModel`（detect/sr 的 prototxt + caffemodel）
 - 可选“自动扫码登录”闭环：
   - `official`：自动调用 `scan + confirm`
   - `bh3_bilibili`：自动调用 `scan + v2_login + confirm`
@@ -98,7 +99,8 @@ docker compose up --build
 ## 依赖说明
 
 - `streamlink`：解析直播页到真实流地址
-- `opencv-python`：读取流并做二维码识别
+- `opencv-contrib-python`：读取流并使用 `wechat_qrcode` 做二维码识别
+- `ScanModel/`：依赖仓库根目录模型文件（`detect.prototxt`、`detect.caffemodel`、`sr.prototxt`、`sr.caffemodel`）
 
 如果系统没有 `streamlink` 命令，可通过 Python 包安装后使用：
 

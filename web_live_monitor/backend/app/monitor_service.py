@@ -18,6 +18,7 @@ from fastapi import WebSocket
 from .qr_parser import parse_qr_payload
 from .scan_login import execute_scan_login
 from .schemas import StartMonitorRequest
+from .wechat_qr_scanner import WeChatQRScanner
 
 
 def _utc_now_iso() -> str:
@@ -27,6 +28,7 @@ def _utc_now_iso() -> str:
 class LiveMonitorService:
     def __init__(self, streamlink_command: str = "streamlink") -> None:
         self._state_lock = threading.Lock()
+        self._frame_lock = threading.Lock()
         self._ws_clients: set[WebSocket] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -34,8 +36,10 @@ class LiveMonitorService:
         self._stop_event: threading.Event | None = None
 
         self._streamlink_command = streamlink_command
-        self._qr_detector = cv2.QRCodeDetector()
+        self._qr_scanner = WeChatQRScanner()
+        self._qr_warning_emitted = False
         self._device_id = str(uuid.uuid4())
+        self._latest_frame_jpeg: bytes | None = None
 
         self._state: dict[str, Any] = {
             "running": False,
@@ -45,6 +49,10 @@ class LiveMonitorService:
             "room_url": None,
             "stream_url": None,
             "quality": None,
+            "qr_backend": self._qr_scanner.backend_name,
+            "qr_model_dir": self._qr_scanner.model_dir,
+            "qr_ready": self._qr_scanner.is_ready,
+            "qr_error": self._qr_scanner.error_message,
             "scan_interval_ms": None,
             "auto_stop_on_ticket": True,
             "enable_scan_login": False,
@@ -52,6 +60,7 @@ class LiveMonitorService:
             "started_at": None,
             "stopped_at": None,
             "last_frame_at": None,
+            "last_preview_at": None,
             "last_detection_at": None,
             "detections_count": 0,
             "last_qr_text": None,
@@ -77,6 +86,12 @@ class LiveMonitorService:
         with self._state_lock:
             return dict(self._state)
 
+    def get_latest_frame_jpeg(self) -> bytes | None:
+        with self._frame_lock:
+            if self._latest_frame_jpeg is None:
+                return None
+            return bytes(self._latest_frame_jpeg)
+
     def start_monitor(self, request: StartMonitorRequest) -> dict[str, Any]:
         with self._state_lock:
             if self._state["running"]:
@@ -95,6 +110,10 @@ class LiveMonitorService:
                     "room_url": room_url,
                     "stream_url": None,
                     "quality": request.quality,
+                    "qr_backend": self._qr_scanner.backend_name,
+                    "qr_model_dir": self._qr_scanner.model_dir,
+                    "qr_ready": self._qr_scanner.is_ready,
+                    "qr_error": self._qr_scanner.error_message,
                     "scan_interval_ms": request.scan_interval_ms,
                     "auto_stop_on_ticket": request.auto_stop_on_ticket,
                     "enable_scan_login": request.enable_scan_login,
@@ -102,6 +121,7 @@ class LiveMonitorService:
                     "started_at": _utc_now_iso(),
                     "stopped_at": None,
                     "last_frame_at": None,
+                    "last_preview_at": None,
                     "last_detection_at": None,
                     "detections_count": 0,
                     "last_qr_text": None,
@@ -116,6 +136,9 @@ class LiveMonitorService:
             )
 
             self._stop_event = stop_event
+            self._qr_warning_emitted = False
+            with self._frame_lock:
+                self._latest_frame_jpeg = None
             self._worker_thread = threading.Thread(
                 target=self._monitor_worker,
                 args=(request, room_url, session_id, stop_event),
@@ -208,26 +231,12 @@ class LiveMonitorService:
         raise RuntimeError(last_error)
 
     def _decode_payloads(self, frame: Any) -> Iterable[str]:
-        payloads: list[str] = []
-
+        if not self._qr_scanner.is_ready:
+            return []
         try:
-            ok, infos, _points, _ = self._qr_detector.detectAndDecodeMulti(frame)
+            return self._qr_scanner.decode(frame)
         except Exception:
-            ok = False
-            infos = ()
-
-        if ok and infos:
-            for text in infos:
-                if text:
-                    payloads.append(text)
-
-        if payloads:
-            return payloads
-
-        text, _points, _ = self._qr_detector.detectAndDecode(frame)
-        if text:
-            payloads.append(text)
-        return payloads
+            return []
 
     def _monitor_worker(
         self,
@@ -251,9 +260,19 @@ class LiveMonitorService:
                 raise RuntimeError("cannot open stream with OpenCV VideoCapture")
 
             self._emit_event("stream_opened", {"session_id": session_id})
+            if not self._qr_scanner.is_ready and not self._qr_warning_emitted:
+                self._qr_warning_emitted = True
+                self._emit_event(
+                    "monitor_warning",
+                    {
+                        "message": self._qr_scanner.error_message
+                        or "qr scanner is not ready; preview works but decode is disabled",
+                    },
+                )
 
             scan_interval_sec = request.scan_interval_ms / 1000.0
             last_scan_at = 0.0
+            last_preview_encode_at = 0.0
             read_fail_count = 0
 
             while not stop_event.is_set():
@@ -270,6 +289,10 @@ class LiveMonitorService:
                 read_fail_count = 0
                 with self._state_lock:
                     self._state["last_frame_at"] = _utc_now_iso()
+
+                if now - last_preview_encode_at >= 0.25:
+                    self._update_latest_frame(frame)
+                    last_preview_encode_at = now
 
                 if now - last_scan_at < scan_interval_sec:
                     continue
@@ -406,6 +429,16 @@ class LiveMonitorService:
                 "message": f"scan login exception: {exc}",
                 "retcode": None,
             }
+
+    def _update_latest_frame(self, frame: Any) -> None:
+        ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+        if not ok:
+            return
+        preview_at = _utc_now_iso()
+        with self._frame_lock:
+            self._latest_frame_jpeg = buf.tobytes()
+        with self._state_lock:
+            self._state["last_preview_at"] = preview_at
 
     def _emit_event(self, event_type: str, payload: dict[str, Any]) -> None:
         if self._loop is None:

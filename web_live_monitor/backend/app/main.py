@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -48,6 +48,22 @@ def health() -> dict[str, object]:
 @app.get("/api/monitor/status")
 def monitor_status() -> dict[str, object]:
     return service.get_status()
+
+
+@app.get("/api/monitor/frame")
+def monitor_frame() -> Response:
+    frame = service.get_latest_frame_jpeg()
+    if frame is None:
+        raise HTTPException(status_code=404, detail="frame not ready")
+
+    return Response(
+        content=frame,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.post("/api/monitor/start")

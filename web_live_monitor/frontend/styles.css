@@ -305,6 +305,32 @@ select:focus {
   word-break: break-word;
 }
 
+.preview-wrap {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(116, 180, 220, 0.25);
+  background: rgba(3, 12, 19, 0.66);
+  padding: 10px;
+}
+
+#live-frame {
+  display: block;
+  width: 100%;
+  max-height: min(72vh, 780px);
+  min-height: clamp(220px, 36vw, 340px);
+  aspect-ratio: 16 / 9;
+  height: auto;
+  border-radius: 10px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.preview-tip {
+  margin: 8px 0 0;
+  color: #9cc0d8;
+  font-size: 13px;
+}
+
 .hidden {
   display: none;
 }
@@ -368,5 +394,10 @@ select:focus {
 
   .btn {
     flex: 1;
+  }
+
+  #live-frame {
+    max-height: 58vh;
+    min-height: 180px;
   }
 }
