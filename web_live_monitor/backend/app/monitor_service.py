@@ -16,6 +16,7 @@ import cv2
 from fastapi import WebSocket
 
 from .qr_parser import parse_qr_payload
+from .scan_login import execute_scan_login
 from .schemas import StartMonitorRequest
 
 
@@ -34,6 +35,7 @@ class LiveMonitorService:
 
         self._streamlink_command = streamlink_command
         self._qr_detector = cv2.QRCodeDetector()
+        self._device_id = str(uuid.uuid4())
 
         self._state: dict[str, Any] = {
             "running": False,
@@ -45,6 +47,8 @@ class LiveMonitorService:
             "quality": None,
             "scan_interval_ms": None,
             "auto_stop_on_ticket": True,
+            "enable_scan_login": False,
+            "server_type": None,
             "started_at": None,
             "stopped_at": None,
             "last_frame_at": None,
@@ -53,6 +57,10 @@ class LiveMonitorService:
             "last_qr_text": None,
             "last_game_name": None,
             "last_ticket": None,
+            "last_scan_login_at": None,
+            "last_scan_login_ok": None,
+            "last_scan_login_stage": None,
+            "last_scan_login_message": None,
             "last_error": None,
         }
 
@@ -89,6 +97,8 @@ class LiveMonitorService:
                     "quality": request.quality,
                     "scan_interval_ms": request.scan_interval_ms,
                     "auto_stop_on_ticket": request.auto_stop_on_ticket,
+                    "enable_scan_login": request.enable_scan_login,
+                    "server_type": request.server_type,
                     "started_at": _utc_now_iso(),
                     "stopped_at": None,
                     "last_frame_at": None,
@@ -97,6 +107,10 @@ class LiveMonitorService:
                     "last_qr_text": None,
                     "last_game_name": None,
                     "last_ticket": None,
+                    "last_scan_login_at": None,
+                    "last_scan_login_ok": None,
+                    "last_scan_login_stage": None,
+                    "last_scan_login_message": None,
                     "last_error": None,
                 }
             )
@@ -119,6 +133,8 @@ class LiveMonitorService:
                 "room_url": room_url,
                 "quality": request.quality,
                 "scan_interval_ms": request.scan_interval_ms,
+                "enable_scan_login": request.enable_scan_login,
+                "server_type": request.server_type,
             },
         )
         return self.get_status()
@@ -300,6 +316,26 @@ class LiveMonitorService:
                         },
                     )
 
+                    if parsed["ticket"] and request.enable_scan_login:
+                        login_result = self._perform_scan_login(request=request, parsed=parsed)
+                        login_time = _utc_now_iso()
+                        with self._state_lock:
+                            self._state["last_scan_login_at"] = login_time
+                            self._state["last_scan_login_ok"] = login_result.get("ok")
+                            self._state["last_scan_login_stage"] = login_result.get("stage")
+                            self._state["last_scan_login_message"] = login_result.get("message")
+
+                        self._emit_event(
+                            "scan_login_result",
+                            {
+                                "login_at": login_time,
+                                "ticket": parsed["ticket"],
+                                "game_code": parsed["game_code"],
+                                "game_name": parsed["game_name"],
+                                **login_result,
+                            },
+                        )
+
                     if parsed["ticket"] and request.auto_stop_on_ticket:
                         self._emit_event(
                             "ticket_detected",
@@ -336,6 +372,40 @@ class LiveMonitorService:
                     "last_error": self.get_status().get("last_error"),
                 },
             )
+
+    def _perform_scan_login(
+        self,
+        *,
+        request: StartMonitorRequest,
+        parsed: dict[str, str | None],
+    ) -> dict[str, Any]:
+        game_code = parsed.get("game_code")
+        ticket = parsed.get("ticket")
+        if not game_code or not ticket:
+            return {
+                "ok": False,
+                "stage": "scan",
+                "message": "missing game_code or ticket for scan login",
+                "retcode": None,
+            }
+
+        try:
+            return execute_scan_login(
+                server_type=request.server_type or "",
+                game_code=game_code,
+                ticket=ticket,
+                uid=request.uid or "",
+                token=request.token or "",
+                username=request.username,
+                device_id=self._device_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "ok": False,
+                "stage": "error",
+                "message": f"scan login exception: {exc}",
+                "retcode": None,
+            }
 
     def _emit_event(self, event_type: str, payload: dict[str, Any]) -> None:
         if self._loop is None:

@@ -2,6 +2,15 @@ const form = document.getElementById("monitor-form");
 const platformSelect = document.getElementById("platform");
 const customUrlWrap = document.getElementById("custom-url-wrap");
 const customUrlInput = document.getElementById("custom_url");
+const enableScanLoginInput = document.getElementById("enable_scan_login");
+const serverTypeInput = document.getElementById("server_type");
+const uidInput = document.getElementById("uid");
+const tokenInput = document.getElementById("token");
+const usernameInput = document.getElementById("username");
+const serverTypeWrap = document.getElementById("server-type-wrap");
+const uidWrap = document.getElementById("uid-wrap");
+const tokenWrap = document.getElementById("token-wrap");
+const usernameWrap = document.getElementById("username-wrap");
 const logBox = document.getElementById("event-log");
 
 const fields = {
@@ -14,6 +23,9 @@ const fields = {
   last_ticket: document.getElementById("last_ticket"),
   last_detection_at: document.getElementById("last_detection_at"),
   last_qr_text: document.getElementById("last_qr_text"),
+  last_scan_login_ok: document.getElementById("last_scan_login_ok"),
+  last_scan_login_stage: document.getElementById("last_scan_login_stage"),
+  last_scan_login_message: document.getElementById("last_scan_login_message"),
   room_url: document.getElementById("room_url"),
   stream_url: document.getElementById("stream_url"),
   last_frame_at: document.getElementById("last_frame_at"),
@@ -78,6 +90,15 @@ function applyStatus(status) {
   fields.last_ticket.textContent = textOrDash(status.last_ticket);
   fields.last_detection_at.textContent = formatTime(status.last_detection_at);
   fields.last_qr_text.textContent = textOrDash(status.last_qr_text);
+  if (status.last_scan_login_ok === true) {
+    fields.last_scan_login_ok.textContent = "SUCCESS";
+  } else if (status.last_scan_login_ok === false) {
+    fields.last_scan_login_ok.textContent = "FAILED";
+  } else {
+    fields.last_scan_login_ok.textContent = "-";
+  }
+  fields.last_scan_login_stage.textContent = textOrDash(status.last_scan_login_stage);
+  fields.last_scan_login_message.textContent = textOrDash(status.last_scan_login_message);
   fields.room_url.textContent = textOrDash(status.room_url);
   fields.stream_url.textContent = textOrDash(status.stream_url);
   fields.last_frame_at.textContent = formatTime(status.last_frame_at);
@@ -110,16 +131,28 @@ async function refreshStatus() {
 
 function getFormPayload() {
   const formData = new FormData(form);
+  const enableScanLogin = Boolean(formData.get("enable_scan_login"));
   const payload = {
     platform: formData.get("platform"),
     room_id: String(formData.get("room_id") || "").trim(),
     quality: String(formData.get("quality") || "best").trim() || "best",
     scan_interval_ms: Number(formData.get("scan_interval_ms") || 500),
     auto_stop_on_ticket: Boolean(formData.get("auto_stop_on_ticket")),
+    enable_scan_login: enableScanLogin,
   };
 
   if (payload.platform === "custom") {
     payload.custom_url = String(formData.get("custom_url") || "").trim();
+  }
+
+  if (enableScanLogin) {
+    payload.server_type = String(formData.get("server_type") || "").trim();
+    payload.uid = String(formData.get("uid") || "").trim();
+    payload.token = String(formData.get("token") || "").trim();
+    const username = String(formData.get("username") || "").trim();
+    if (username) {
+      payload.username = username;
+    }
   }
 
   return payload;
@@ -200,6 +233,20 @@ function updateCustomUrlVisibility() {
   customUrlInput.required = isCustom;
 }
 
+function updateScanLoginVisibility() {
+  const enabled = enableScanLoginInput.checked;
+  const isBh3 = serverTypeInput.value === "bh3_bilibili";
+
+  serverTypeWrap.classList.toggle("hidden", !enabled);
+  uidWrap.classList.toggle("hidden", !enabled);
+  tokenWrap.classList.toggle("hidden", !enabled);
+  usernameWrap.classList.toggle("hidden", !(enabled && isBh3));
+
+  uidInput.required = enabled;
+  tokenInput.required = enabled;
+  usernameInput.required = enabled && isBh3;
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   startButton.disabled = true;
@@ -225,7 +272,10 @@ stopButton.addEventListener("click", async () => {
 
 refreshButton.addEventListener("click", refreshStatus);
 platformSelect.addEventListener("change", updateCustomUrlVisibility);
+enableScanLoginInput.addEventListener("change", updateScanLoginVisibility);
+serverTypeInput.addEventListener("change", updateScanLoginVisibility);
 
 updateCustomUrlVisibility();
+updateScanLoginVisibility();
 refreshStatus();
 connectWs();

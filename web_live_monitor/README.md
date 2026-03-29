@@ -9,6 +9,9 @@
 - 后端使用 OpenCV 实时识别二维码并提取：
   - `game_code`（兼容原项目规则：`8F3` / `9E&` / `8F%` / `%BA`）
   - `ticket`（末尾 24 位）
+- 可选“自动扫码登录”闭环：
+  - `official`：自动调用 `scan + confirm`
+  - `bh3_bilibili`：自动调用 `scan + v2_login + confirm`
 - WebSocket 实时推送事件（启动、解析流成功、识别成功、错误、停止）
 - 前端控制台支持开始/停止监视、查看状态和日志
 
@@ -72,7 +75,23 @@ docker compose up --build
   "room_id": "6",
   "quality": "best",
   "scan_interval_ms": 500,
-  "auto_stop_on_ticket": true
+  "auto_stop_on_ticket": true,
+  "enable_scan_login": true,
+  "server_type": "official",
+  "uid": "123456789",
+  "token": "your_game_token"
+}
+```
+
+`bh3_bilibili` 额外需要：
+
+```json
+{
+  "enable_scan_login": true,
+  "server_type": "bh3_bilibili",
+  "uid": "123456789",
+  "token": "your_access_key",
+  "username": "your_bh3_name"
 }
 ```
 

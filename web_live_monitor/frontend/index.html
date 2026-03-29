@@ -61,6 +61,34 @@
             检出 Ticket 后自动停止
           </label>
 
+          <label class="checkbox-row">
+            <input id="enable_scan_login" name="enable_scan_login" type="checkbox" />
+            启用自动扫码登录
+          </label>
+
+          <label id="server-type-wrap" class="hidden">
+            登录类型
+            <select id="server_type" name="server_type">
+              <option value="official">官服</option>
+              <option value="bh3_bilibili">崩坏3 B服</option>
+            </select>
+          </label>
+
+          <label id="uid-wrap" class="hidden">
+            UID
+            <input id="uid" name="uid" type="text" placeholder="输入账号 UID" />
+          </label>
+
+          <label id="token-wrap" class="hidden">
+            Token
+            <input id="token" name="token" type="text" placeholder="官服填 game_token；B服填 access_key" />
+          </label>
+
+          <label id="username-wrap" class="hidden">
+            用户名(仅B服)
+            <input id="username" name="username" type="text" placeholder="崩坏3 B服账号昵称" />
+          </label>
+
           <div class="button-row">
             <button id="start-btn" type="submit" class="btn btn-primary">开始监视</button>
             <button id="stop-btn" type="button" class="btn btn-secondary">停止监视</button>
@@ -87,6 +115,9 @@
             <div><dt>游戏</dt><dd id="last_game_name">-</dd></div>
             <div><dt>Ticket</dt><dd id="last_ticket">-</dd></div>
             <div><dt>检测时间</dt><dd id="last_detection_at">-</dd></div>
+            <div><dt>登录结果</dt><dd id="last_scan_login_ok">-</dd></div>
+            <div><dt>登录阶段</dt><dd id="last_scan_login_stage">-</dd></div>
+            <div><dt>登录消息</dt><dd id="last_scan_login_message">-</dd></div>
           </dl>
           <p class="raw-label">原始二维码内容</p>
           <pre id="last_qr_text" class="raw-block">-</pre>

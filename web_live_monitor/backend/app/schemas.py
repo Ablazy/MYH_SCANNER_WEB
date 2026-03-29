@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class StartMonitorRequest(BaseModel):
@@ -12,6 +12,11 @@ class StartMonitorRequest(BaseModel):
     scan_interval_ms: int = Field(default=500, ge=100, le=5000)
     custom_url: str | None = Field(default=None, max_length=1024)
     auto_stop_on_ticket: bool = True
+    enable_scan_login: bool = False
+    server_type: Literal["official", "bh3_bilibili"] | None = None
+    uid: str | None = Field(default=None, max_length=64)
+    token: str | None = Field(default=None, max_length=2048)
+    username: str | None = Field(default=None, max_length=128)
 
     @field_validator("room_id")
     @classmethod
@@ -36,3 +41,44 @@ class StartMonitorRequest(BaseModel):
             return value
         value = value.strip()
         return value or None
+
+    @field_validator("uid")
+    @classmethod
+    def strip_uid(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        return value or None
+
+    @field_validator("token")
+    @classmethod
+    def strip_token(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        return value or None
+
+    @field_validator("username")
+    @classmethod
+    def strip_username(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        return value or None
+
+    @model_validator(mode="after")
+    def validate_login_fields(self) -> "StartMonitorRequest":
+        if not self.enable_scan_login:
+            return self
+
+        if not self.server_type:
+            raise ValueError("server_type is required when enable_scan_login is true")
+        if not self.uid:
+            raise ValueError("uid is required when enable_scan_login is true")
+        if not self.token:
+            raise ValueError("token is required when enable_scan_login is true")
+
+        if self.server_type == "bh3_bilibili" and not self.username:
+            raise ValueError("username is required for bh3_bilibili scan login")
+
+        return self
