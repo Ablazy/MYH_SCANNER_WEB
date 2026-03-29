@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>直播间二维码监视台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb bg-orb-a" aria-hidden="true"></div>
+    <div class="bg-orb bg-orb-b" aria-hidden="true"></div>
+
+    <main class="layout">
+      <header class="hero">
+        <p class="eyebrow">Live Room Monitor</p>
+        <h1>直播间二维码监视台</h1>
+        <p class="sub">
+          后端负责解析直播流并识别二维码，前端负责控制监视流程与实时展示检测事件。
+        </p>
+      </header>
+
+      <section class="panel">
+        <h2>监视配置</h2>
+        <form id="monitor-form" class="form-grid">
+          <label>
+            平台
+            <select id="platform" name="platform">
+              <option value="bilibili">B站</option>
+              <option value="douyin">抖音</option>
+              <option value="custom">自定义URL</option>
+            </select>
+          </label>
+
+          <label>
+            房间号
+            <input id="room_id" name="room_id" type="text" placeholder="例如 6 或 262229562462" required />
+          </label>
+
+          <label id="custom-url-wrap" class="hidden">
+            自定义直播页URL
+            <input
+              id="custom_url"
+              name="custom_url"
+              type="url"
+              placeholder="https://example.com/live/room"
+            />
+          </label>
+
+          <label>
+            清晰度
+            <input id="quality" name="quality" type="text" value="best" />
+          </label>
+
+          <label>
+            扫描间隔(ms)
+            <input id="scan_interval_ms" name="scan_interval_ms" type="number" min="100" max="5000" value="500" />
+          </label>
+
+          <label class="checkbox-row">
+            <input id="auto_stop_on_ticket" name="auto_stop_on_ticket" type="checkbox" checked />
+            检出 Ticket 后自动停止
+          </label>
+
+          <div class="button-row">
+            <button id="start-btn" type="submit" class="btn btn-primary">开始监视</button>
+            <button id="stop-btn" type="button" class="btn btn-secondary">停止监视</button>
+            <button id="refresh-btn" type="button" class="btn btn-ghost">刷新状态</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="status-grid">
+        <article class="card">
+          <h3>运行状态</h3>
+          <p id="running-badge" class="badge badge-idle">IDLE</p>
+          <dl>
+            <div><dt>会话ID</dt><dd id="session_id">-</dd></div>
+            <div><dt>平台</dt><dd id="platform_text">-</dd></div>
+            <div><dt>房间</dt><dd id="room_text">-</dd></div>
+            <div><dt>累计检测</dt><dd id="detections_count">0</dd></div>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h3>最新识别</h3>
+          <dl>
+            <div><dt>游戏</dt><dd id="last_game_name">-</dd></div>
+            <div><dt>Ticket</dt><dd id="last_ticket">-</dd></div>
+            <div><dt>检测时间</dt><dd id="last_detection_at">-</dd></div>
+          </dl>
+          <p class="raw-label">原始二维码内容</p>
+          <pre id="last_qr_text" class="raw-block">-</pre>
+        </article>
+
+        <article class="card">
+          <h3>流信息</h3>
+          <dl>
+            <div><dt>直播页URL</dt><dd id="room_url">-</dd></div>
+            <div><dt>流地址</dt><dd id="stream_url">-</dd></div>
+            <div><dt>最近帧时间</dt><dd id="last_frame_at">-</dd></div>
+            <div><dt>最近错误</dt><dd id="last_error">-</dd></div>
+          </dl>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>实时事件</h2>
+        <div id="event-log" class="log"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

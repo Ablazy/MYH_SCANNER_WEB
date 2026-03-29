@@ -1,0 +1,10 @@
+services:
+  live-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - STREAMLINK_COMMAND=streamlink
+    restart: unless-stopped

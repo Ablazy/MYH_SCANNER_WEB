@@ -1,0 +1,372 @@
+:root {
+  --font-main: "IBM Plex Sans", "Noto Sans SC", "PingFang SC", sans-serif;
+  --bg-0: #070d12;
+  --bg-1: #0f1b24;
+  --bg-2: #162936;
+  --panel: rgba(11, 25, 36, 0.72);
+  --panel-border: rgba(116, 180, 220, 0.26);
+  --text-main: #e8f3fb;
+  --text-sub: #9eb7cb;
+  --accent: #45c0ff;
+  --accent-2: #11dfb6;
+  --danger: #ff6f6f;
+  --idle: #6f8da4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: var(--font-main);
+  color: var(--text-main);
+  background: radial-gradient(circle at 10% 10%, #1f4f6f 0%, transparent 40%),
+    radial-gradient(circle at 90% 10%, #214d45 0%, transparent 35%),
+    linear-gradient(145deg, var(--bg-0), var(--bg-1) 45%, var(--bg-2));
+}
+
+body {
+  position: relative;
+  overflow-x: hidden;
+}
+
+.bg-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(42px);
+  opacity: 0.32;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-orb-a {
+  width: 320px;
+  height: 320px;
+  background: #2fd2ff;
+  top: -120px;
+  right: -80px;
+  animation: driftA 9s ease-in-out infinite alternate;
+}
+
+.bg-orb-b {
+  width: 280px;
+  height: 280px;
+  background: #0fe2a5;
+  bottom: -100px;
+  left: -60px;
+  animation: driftB 10s ease-in-out infinite alternate;
+}
+
+.layout {
+  position: relative;
+  z-index: 1;
+  width: min(1100px, 100% - 32px);
+  margin: 20px auto 36px;
+  display: grid;
+  gap: 14px;
+}
+
+.hero {
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: linear-gradient(150deg, rgba(33, 68, 95, 0.55), rgba(19, 50, 66, 0.65));
+  border: 1px solid rgba(147, 211, 246, 0.28);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.26);
+  animation: enterUp 420ms ease-out;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8ed8ff;
+}
+
+.hero h1 {
+  margin: 6px 0 4px;
+  font-size: clamp(24px, 3.4vw, 34px);
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-sub);
+}
+
+.panel,
+.card {
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+  animation: enterUp 450ms ease-out;
+}
+
+.panel {
+  padding: 18px;
+}
+
+.panel h2,
+.card h3 {
+  margin: 0 0 12px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: #c8deed;
+}
+
+input,
+select,
+button,
+pre {
+  font-family: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid rgba(115, 165, 197, 0.35);
+  border-radius: 10px;
+  background: rgba(8, 20, 30, 0.72);
+  color: var(--text-main);
+  padding: 10px 12px;
+  outline: none;
+}
+
+input:focus,
+select:focus {
+  border-color: #52ceff;
+  box-shadow: 0 0 0 2px rgba(82, 206, 255, 0.22);
+}
+
+.checkbox-row {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 26px;
+  gap: 10px;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 11px 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.btn-primary {
+  background: linear-gradient(120deg, #29cafc, #28f6bf);
+  color: #053145;
+}
+
+.btn-secondary {
+  background: linear-gradient(120deg, #4d7ba0, #43617e);
+  color: #d6ebfb;
+}
+
+.btn-ghost {
+  background: rgba(95, 142, 175, 0.18);
+  color: #b8d6eb;
+  border: 1px solid rgba(125, 179, 215, 0.4);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  padding: 16px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.badge-running {
+  background: rgba(17, 223, 182, 0.2);
+  color: #2fffd2;
+}
+
+.badge-idle {
+  background: rgba(111, 141, 164, 0.2);
+  color: #9fb8ca;
+}
+
+.card dl {
+  margin: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.card dl div {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 8px;
+}
+
+.card dt {
+  color: #89abc4;
+}
+
+.card dd {
+  margin: 0;
+  color: #eff9ff;
+  word-break: break-all;
+}
+
+.raw-label {
+  margin: 12px 0 6px;
+  color: #88aeca;
+}
+
+.raw-block {
+  margin: 0;
+  max-height: 138px;
+  overflow: auto;
+  border-radius: 10px;
+  background: rgba(4, 13, 20, 0.65);
+  border: 1px solid rgba(114, 162, 193, 0.25);
+  padding: 10px;
+  color: #c8edff;
+  white-space: pre-wrap;
+}
+
+.log {
+  max-height: 290px;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(116, 180, 220, 0.23);
+  background: rgba(4, 14, 22, 0.7);
+  padding: 8px;
+}
+
+.log-item {
+  border-radius: 8px;
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: rgba(15, 37, 53, 0.8);
+  border-left: 3px solid #4bcaff;
+  animation: fadeIn 280ms ease;
+}
+
+.log-meta {
+  font-size: 12px;
+  color: #82a9c4;
+}
+
+.log-type {
+  color: #2ee9b8;
+}
+
+.log-text {
+  margin-top: 3px;
+  color: #d7ecfa;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hidden {
+  display: none;
+}
+
+@keyframes enterUp {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes driftA {
+  from {
+    transform: translateY(0) scale(1);
+  }
+  to {
+    transform: translateY(26px) scale(1.07);
+  }
+}
+
+@keyframes driftB {
+  from {
+    transform: translateY(0) scale(1);
+  }
+  to {
+    transform: translateY(-30px) scale(1.08);
+  }
+}
+
+@media (max-width: 760px) {
+  .layout {
+    width: min(1100px, 100% - 20px);
+    margin: 12px auto 20px;
+  }
+
+  .hero,
+  .panel,
+  .card {
+    border-radius: 12px;
+    padding: 14px;
+  }
+
+  .button-row {
+    width: 100%;
+  }
+
+  .btn {
+    flex: 1;
+  }
+}
