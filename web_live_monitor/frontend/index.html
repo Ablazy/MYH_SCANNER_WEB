@@ -22,43 +22,11 @@
       <section class="panel">
         <h2>账号管理</h2>
         <div class="account-toolbar">
-          <div class="form-grid">
-            <label class="account-name-input">
-              账号备注
-              <input id="account_name" type="text" placeholder="例如：主号-官服 / B服小号" />
-            </label>
-
-            <label>
-              登录类型
-              <select id="account_server_type">
-                <option value="official">官服</option>
-                <option value="bh3_bilibili">崩坏3 B服</option>
-              </select>
-            </label>
-
-            <label>
-              Token
-              <input id="account_token" type="text" placeholder="官服可填含 stuid/ltuid/account_id 的 cookie；B服填 access_key" />
-            </label>
-
-            <label id="account-username-wrap" class="hidden">
-              用户名(仅B服)
-              <input id="account_username" type="text" placeholder="崩坏3 B服账号昵称" />
-            </label>
-          </div>
-          <p class="preview-tip">UID 由后端从 Token 自动解析，重复 UID 账号不允许保存。</p>
           <div class="button-row">
-            <button id="save-account-btn" type="button" class="btn btn-primary">保存当前账号</button>
-            <button id="update-account-btn" type="button" class="btn btn-secondary">更新选中账号</button>
-            <button id="scan-add-official-btn" type="button" class="btn btn-secondary">扫码添加官服账号</button>
-            <button id="cancel-scan-official-btn" type="button" class="btn btn-ghost">取消扫码流程</button>
+            <button id="add-account-btn" type="button" class="btn btn-primary">添加账号</button>
             <button id="set-default-account-btn" type="button" class="btn btn-ghost">设为默认</button>
             <button id="delete-account-btn" type="button" class="btn btn-ghost">删除选中</button>
             <button id="reload-accounts-btn" type="button" class="btn btn-ghost">刷新账号</button>
-          </div>
-          <div id="official-qr-box" class="official-qr-box hidden">
-            <img id="official-qr-image" alt="官服扫码登录二维码" />
-            <p id="official-qr-status" class="preview-tip">等待生成二维码</p>
           </div>
         </div>
         <div class="account-table-wrap">
@@ -184,6 +152,65 @@
         <div id="event-log" class="log"></div>
       </section>
     </main>
+
+    <div id="account-modal" class="modal hidden">
+      <div class="modal-mask" id="account-modal-mask"></div>
+      <div class="modal-panel">
+        <div class="modal-head">
+          <h3>添加账号</h3>
+          <button id="close-account-modal-btn" type="button" class="btn btn-ghost">关闭</button>
+        </div>
+        <div class="modal-tabs">
+          <button id="tab-manual-btn" type="button" class="btn btn-secondary active">手动添加</button>
+          <button id="tab-qr-btn" type="button" class="btn btn-ghost">扫码添加</button>
+        </div>
+
+        <div id="manual-pane" class="modal-pane">
+          <div class="form-grid">
+            <label>
+              账号备注
+              <input id="manual_account_name" type="text" placeholder="例如：主号-官服 / B服小号" />
+            </label>
+            <label>
+              登录类型
+              <select id="manual_account_server_type">
+                <option value="official">官服</option>
+                <option value="bh3_bilibili">崩坏3 B服</option>
+              </select>
+            </label>
+            <label>
+              Token
+              <input id="manual_account_token" type="text" placeholder="官服可填含 stuid/ltuid/account_id 的 cookie；B服填 access_key" />
+            </label>
+            <label id="manual-account-username-wrap" class="hidden">
+              用户名(仅B服)
+              <input id="manual_account_username" type="text" placeholder="崩坏3 B服账号昵称" />
+            </label>
+          </div>
+          <p class="preview-tip">UID 由后端从 Token 自动解析，重复 UID 不允许保存。</p>
+          <div class="button-row">
+            <button id="save-manual-account-btn" type="button" class="btn btn-primary">保存账号</button>
+          </div>
+        </div>
+
+        <div id="qr-pane" class="modal-pane hidden">
+          <div class="form-grid">
+            <label>
+              账号备注(可选)
+              <input id="qr_account_name" type="text" placeholder="留空则自动使用昵称/UID" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="scan-add-official-btn" type="button" class="btn btn-secondary">开始扫码添加</button>
+            <button id="cancel-scan-official-btn" type="button" class="btn btn-ghost">取消扫码流程</button>
+          </div>
+          <div id="official-qr-box" class="official-qr-box hidden">
+            <img id="official-qr-image" alt="官服扫码登录二维码" />
+            <p id="official-qr-status" class="preview-tip">等待生成二维码</p>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="/app.js"></script>
   </body>

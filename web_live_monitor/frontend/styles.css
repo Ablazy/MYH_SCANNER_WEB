@@ -200,6 +200,59 @@ select:focus {
   background: #f9fcff;
 }
 
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 8, 14, 0.68);
+}
+
+.modal-panel {
+  position: relative;
+  width: min(840px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(132, 196, 234, 0.34);
+  background: linear-gradient(155deg, rgba(12, 29, 42, 0.95), rgba(9, 22, 33, 0.96));
+  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.42);
+  padding: 14px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modal-head h3 {
+  margin: 0;
+}
+
+.modal-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.modal-tabs .btn.active {
+  background: linear-gradient(120deg, #29cafc, #28f6bf);
+  color: #053145;
+}
+
+.modal-pane {
+  margin-top: 12px;
+}
+
 .account-table-wrap {
   margin-top: 10px;
   border-radius: 10px;

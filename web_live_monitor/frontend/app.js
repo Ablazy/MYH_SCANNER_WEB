@@ -3,20 +3,44 @@ const platformSelect = document.getElementById("platform");
 const customUrlWrap = document.getElementById("custom-url-wrap");
 const customUrlInput = document.getElementById("custom_url");
 const roomIdInput = document.getElementById("room_id");
-const enableScanLoginInput = document.getElementById("enable_scan_login");
-const accountServerTypeInput = document.getElementById("account_server_type");
-const accountTokenInput = document.getElementById("account_token");
-const accountUsernameInput = document.getElementById("account_username");
-const accountUsernameWrap = document.getElementById("account-username-wrap");
+
 const liveFrameImage = document.getElementById("live-frame");
 const frameStatus = document.getElementById("frame-status");
 const logBox = document.getElementById("event-log");
-const accountNameInput = document.getElementById("account_name");
+
 const accountsTbody = document.getElementById("accounts-tbody");
 const accountsEmptyTip = document.getElementById("accounts-empty-tip");
+
+const addAccountButton = document.getElementById("add-account-btn");
+const deleteAccountButton = document.getElementById("delete-account-btn");
+const setDefaultAccountButton = document.getElementById("set-default-account-btn");
+const reloadAccountsButton = document.getElementById("reload-accounts-btn");
+
+const accountModal = document.getElementById("account-modal");
+const accountModalMask = document.getElementById("account-modal-mask");
+const closeAccountModalButton = document.getElementById("close-account-modal-btn");
+const tabManualButton = document.getElementById("tab-manual-btn");
+const tabQrButton = document.getElementById("tab-qr-btn");
+const manualPane = document.getElementById("manual-pane");
+const qrPane = document.getElementById("qr-pane");
+
+const manualAccountNameInput = document.getElementById("manual_account_name");
+const manualAccountServerTypeInput = document.getElementById("manual_account_server_type");
+const manualAccountTokenInput = document.getElementById("manual_account_token");
+const manualAccountUsernameInput = document.getElementById("manual_account_username");
+const manualAccountUsernameWrap = document.getElementById("manual-account-username-wrap");
+const saveManualAccountButton = document.getElementById("save-manual-account-btn");
+
+const qrAccountNameInput = document.getElementById("qr_account_name");
+const scanAddOfficialButton = document.getElementById("scan-add-official-btn");
+const cancelScanOfficialButton = document.getElementById("cancel-scan-official-btn");
 const officialQrBox = document.getElementById("official-qr-box");
 const officialQrImage = document.getElementById("official-qr-image");
 const officialQrStatus = document.getElementById("official-qr-status");
+
+const startButton = document.getElementById("start-btn");
+const stopButton = document.getElementById("stop-btn");
+const refreshButton = document.getElementById("refresh-btn");
 
 const fields = {
   runningBadge: document.getElementById("running-badge"),
@@ -37,17 +61,6 @@ const fields = {
   last_preview_at: document.getElementById("last_preview_at"),
   last_error: document.getElementById("last_error"),
 };
-
-const startButton = document.getElementById("start-btn");
-const stopButton = document.getElementById("stop-btn");
-const refreshButton = document.getElementById("refresh-btn");
-const saveAccountButton = document.getElementById("save-account-btn");
-const updateAccountButton = document.getElementById("update-account-btn");
-const deleteAccountButton = document.getElementById("delete-account-btn");
-const setDefaultAccountButton = document.getElementById("set-default-account-btn");
-const reloadAccountsButton = document.getElementById("reload-accounts-btn");
-const scanAddOfficialButton = document.getElementById("scan-add-official-btn");
-const cancelScanOfficialButton = document.getElementById("cancel-scan-official-btn");
 
 let ws = null;
 let wsTimer = null;
@@ -97,6 +110,29 @@ function appendLog(type, payload, time) {
   }
 }
 
+async function callApi(path, init) {
+  const response = await fetch(path, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+    ...init,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || `HTTP ${response.status}`);
+  }
+  return data;
+}
+
+function requireValue(value, label) {
+  const result = String(value || "").trim();
+  if (!result) {
+    throw new Error(`${label}不能为空`);
+  }
+  return result;
+}
+
 function applyStatus(status) {
   fields.runningBadge.textContent = status.running ? "RUNNING" : "IDLE";
   fields.runningBadge.className = status.running ? "badge badge-running" : "badge badge-idle";
@@ -131,61 +167,18 @@ function applyStatus(status) {
   }
 }
 
-async function callApi(path, init) {
-  const response = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    ...init,
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.detail || `HTTP ${response.status}`);
+async function refreshStatus() {
+  try {
+    const status = await callApi("/api/monitor/status", { method: "GET" });
+    applyStatus(status);
+  } catch (error) {
+    appendLog("status_error", String(error), new Date().toISOString());
   }
-  return data;
 }
 
-function requireValue(value, label) {
-  const result = String(value || "").trim();
-  if (!result) {
-    throw new Error(`${label}不能为空`);
-  }
-  return result;
-}
-
-function collectAccountPayload() {
-  const payload = {
-    name: requireValue(accountNameInput.value, "账号备注"),
-    server_type: String(accountServerTypeInput.value || "official").trim(),
-    token: requireValue(accountTokenInput.value, "Token"),
-  };
-
-  const username = String(accountUsernameInput.value || "").trim();
-  if (payload.server_type === "bh3_bilibili") {
-    payload.username = requireValue(username, "用户名");
-  } else if (username) {
-    payload.username = username;
-  }
-
-  return payload;
-}
-
-function applyAccountToForm(account) {
-  accountNameInput.value = account.name || "";
-  accountServerTypeInput.value = account.server_type || "official";
-  accountTokenInput.value = account.token || "";
-  accountUsernameInput.value = account.username || "";
-  updateAccountFieldsVisibility();
-}
-
-function setSelectedAccount(accountId, { apply = true } = {}) {
+function setSelectedAccount(accountId) {
   selectedAccountId = accountId;
   renderAccounts();
-  const account = accounts.find((item) => item.id === accountId);
-  if (apply && account) {
-    applyAccountToForm(account);
-  }
 }
 
 function renderAccounts() {
@@ -221,7 +214,7 @@ function renderAccounts() {
 
     tr.append(defaultCell, nameCell, typeCell, uidCell, updatedCell);
     tr.addEventListener("click", () => {
-      setSelectedAccount(account.id, { apply: true });
+      setSelectedAccount(account.id);
     });
     accountsTbody.append(tr);
   }
@@ -238,22 +231,20 @@ async function refreshAccounts({ autoApplyDefault = true } = {}) {
 
   if (!selectedAccountId && autoApplyDefault && defaultAccountId) {
     selectedAccountId = defaultAccountId;
-    const defaultAccount = accounts.find((item) => item.id === defaultAccountId);
-    if (defaultAccount) {
-      applyAccountToForm(defaultAccount);
-      accountNameInput.value = defaultAccount.name || "";
-    }
   }
 
   renderAccounts();
 }
 
-async function refreshStatus() {
-  try {
-    const status = await callApi("/api/monitor/status", { method: "GET" });
-    applyStatus(status);
-  } catch (error) {
-    appendLog("status_error", String(error), new Date().toISOString());
+function updateCustomUrlVisibility() {
+  const isCustom = platformSelect.value === "custom";
+  customUrlWrap.classList.toggle("hidden", !isCustom);
+  customUrlInput.required = isCustom;
+  roomIdInput.required = !isCustom;
+  if (isCustom) {
+    roomIdInput.placeholder = "自定义URL模式下可留空";
+  } else {
+    roomIdInput.placeholder = "例如 6 或 262229562462";
   }
 }
 
@@ -276,13 +267,13 @@ function getFormPayload() {
   if (enableScanLogin) {
     const selectedAccount = accounts.find((item) => item.id === selectedAccountId);
     if (!selectedAccount) {
-      throw new Error("已启用自动扫码登录，请先在账号管理中选择一个账号");
+      throw new Error("已启用自动扫码登录，请先在账号列表中选择一个账号");
     }
     payload.server_type = String(selectedAccount.server_type || "").trim();
     payload.uid = String(selectedAccount.uid || "").trim();
     payload.token = String(selectedAccount.token || "").trim();
     if (!payload.server_type || !payload.uid || !payload.token) {
-      throw new Error("当前账号登录配置不完整，请在账号管理中补全后再开始监视");
+      throw new Error("当前账号登录配置不完整，请重新添加账号");
     }
     const username = String(selectedAccount.username || "").trim();
     if (username) {
@@ -307,6 +298,213 @@ async function stopMonitor() {
   const status = await callApi("/api/monitor/stop", { method: "POST" });
   applyStatus(status);
   appendLog("stop_ok", "monitor stop requested", new Date().toISOString());
+}
+
+function switchAccountModalTab(tab) {
+  const manual = tab === "manual";
+  tabManualButton.classList.remove("btn-primary", "btn-secondary", "btn-ghost");
+  tabQrButton.classList.remove("btn-primary", "btn-secondary", "btn-ghost");
+  tabManualButton.classList.toggle("active", manual);
+  tabManualButton.classList.add(manual ? "btn-primary" : "btn-ghost");
+  tabQrButton.classList.toggle("active", !manual);
+  tabQrButton.classList.add(!manual ? "btn-primary" : "btn-ghost");
+
+  manualPane.classList.toggle("hidden", !manual);
+  qrPane.classList.toggle("hidden", manual);
+}
+
+function clearManualAccountForm() {
+  manualAccountNameInput.value = "";
+  manualAccountServerTypeInput.value = "official";
+  manualAccountTokenInput.value = "";
+  manualAccountUsernameInput.value = "";
+  updateManualAccountFieldsVisibility();
+}
+
+function openAccountModal(tab = "manual") {
+  accountModal.classList.remove("hidden");
+  switchAccountModalTab(tab);
+}
+
+function closeAccountModal() {
+  accountModal.classList.add("hidden");
+}
+
+function updateManualAccountFieldsVisibility() {
+  const isBh3 = manualAccountServerTypeInput.value === "bh3_bilibili";
+  manualAccountUsernameWrap.classList.toggle("hidden", !isBh3);
+  manualAccountUsernameInput.required = isBh3;
+}
+
+function collectManualAccountPayload() {
+  const payload = {
+    name: requireValue(manualAccountNameInput.value, "账号备注"),
+    server_type: String(manualAccountServerTypeInput.value || "official").trim(),
+    token: requireValue(manualAccountTokenInput.value, "Token"),
+  };
+
+  const username = String(manualAccountUsernameInput.value || "").trim();
+  if (payload.server_type === "bh3_bilibili") {
+    payload.username = requireValue(username, "用户名");
+  } else if (username) {
+    payload.username = username;
+  }
+
+  return payload;
+}
+
+async function createManualAccount() {
+  const payload = collectManualAccountPayload();
+  const data = await callApi("/api/accounts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  defaultAccountId = data.default_account_id || null;
+  if (data.account && data.account.id) {
+    selectedAccountId = data.account.id;
+  }
+  renderAccounts();
+  appendLog("account_saved", { name: payload.name }, new Date().toISOString());
+  clearManualAccountForm();
+  closeAccountModal();
+}
+
+function stopOfficialQrPolling() {
+  if (officialQrPollTimer) {
+    clearInterval(officialQrPollTimer);
+    officialQrPollTimer = null;
+  }
+}
+
+function isOfficialQrFinal(state) {
+  return state === "confirmed" || state === "expired" || state === "duplicate" || state === "error" || state === "cancelled";
+}
+
+function renderOfficialQrSession(data) {
+  if (!data || !data.session_id) {
+    officialQrBox.classList.add("hidden");
+    officialQrImage.removeAttribute("src");
+    officialQrStatus.textContent = "等待生成二维码";
+    return;
+  }
+
+  officialQrBox.classList.remove("hidden");
+  if (data.qrcode_image_data_url) {
+    officialQrImage.src = data.qrcode_image_data_url;
+  }
+  officialQrStatus.textContent = data.state_text || data.state || "-";
+}
+
+async function startOfficialQrAccountFlow() {
+  const payload = {
+    name: String(qrAccountNameInput.value || "").trim() || null,
+  };
+  const data = await callApi("/api/accounts/official-qr/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  officialQrSessionId = String(data.session_id || "");
+  renderOfficialQrSession(data);
+  appendLog("account_qr_start", { session_id: officialQrSessionId }, new Date().toISOString());
+
+  stopOfficialQrPolling();
+  officialQrPollTimer = setInterval(() => {
+    pollOfficialQrAccountFlow().catch((error) => {
+      appendLog("account_qr_poll_error", String(error), new Date().toISOString());
+    });
+  }, 1500);
+}
+
+async function pollOfficialQrAccountFlow() {
+  if (!officialQrSessionId) {
+    return;
+  }
+
+  const data = await callApi(`/api/accounts/official-qr/${officialQrSessionId}/status`, { method: "GET" });
+  renderOfficialQrSession(data);
+
+  if (!isOfficialQrFinal(String(data.state || ""))) {
+    return;
+  }
+
+  stopOfficialQrPolling();
+  appendLog("account_qr_state", { state: data.state, uid: data.uid || null }, new Date().toISOString());
+
+  if (data.state === "confirmed" && data.account && data.account.id) {
+    await refreshAccounts({ autoApplyDefault: false });
+    setSelectedAccount(data.account.id);
+    closeAccountModal();
+  } else if (data.state === "duplicate" && data.uid) {
+    await refreshAccounts({ autoApplyDefault: false });
+    const exists = accounts.find((item) => String(item.uid || "") === String(data.uid));
+    if (exists) {
+      setSelectedAccount(exists.id);
+    }
+  }
+}
+
+async function cancelOfficialQrAccountFlow() {
+  if (!officialQrSessionId) {
+    renderOfficialQrSession(null);
+    return;
+  }
+  const data = await callApi(`/api/accounts/official-qr/${officialQrSessionId}/cancel`, {
+    method: "POST",
+  });
+  renderOfficialQrSession(data);
+  stopOfficialQrPolling();
+  appendLog("account_qr_cancel", { session_id: officialQrSessionId }, new Date().toISOString());
+  officialQrSessionId = null;
+}
+
+async function deleteSelectedAccount() {
+  if (!selectedAccountId) {
+    throw new Error("请先在账号列表中选择要删除的账号");
+  }
+  const currentId = selectedAccountId;
+  await callApi(`/api/accounts/${currentId}`, { method: "DELETE" });
+  if (selectedAccountId === currentId) {
+    selectedAccountId = null;
+  }
+  await refreshAccounts({ autoApplyDefault: false });
+  appendLog("account_deleted", { id: currentId }, new Date().toISOString());
+}
+
+async function setSelectedAsDefault() {
+  if (!selectedAccountId) {
+    throw new Error("请先在账号列表中选择默认账号");
+  }
+  const data = await callApi(`/api/accounts/${selectedAccountId}/default`, {
+    method: "POST",
+  });
+  accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  defaultAccountId = data.default_account_id || null;
+  renderAccounts();
+  appendLog("account_default_set", { id: selectedAccountId }, new Date().toISOString());
+}
+
+function refreshFrame() {
+  const ts = Date.now();
+  liveFrameImage.src = `/api/monitor/frame?ts=${ts}`;
+}
+
+function startFramePolling() {
+  if (frameTimer) {
+    return;
+  }
+  frameStatus.textContent = "正在拉取实时画面...";
+  refreshFrame();
+  frameTimer = setInterval(refreshFrame, 450);
+}
+
+function stopFramePolling(message) {
+  if (frameTimer) {
+    clearInterval(frameTimer);
+    frameTimer = null;
+  }
+  liveFrameImage.removeAttribute("src");
+  frameStatus.textContent = message;
 }
 
 function connectWs() {
@@ -362,192 +560,6 @@ function connectWs() {
   };
 }
 
-function updateCustomUrlVisibility() {
-  const isCustom = platformSelect.value === "custom";
-  customUrlWrap.classList.toggle("hidden", !isCustom);
-  customUrlInput.required = isCustom;
-  roomIdInput.required = !isCustom;
-  if (isCustom) {
-    roomIdInput.placeholder = "自定义URL模式下可留空";
-  } else {
-    roomIdInput.placeholder = "例如 6 或 262229562462";
-  }
-}
-
-function updateAccountFieldsVisibility() {
-  const isBh3 = accountServerTypeInput.value === "bh3_bilibili";
-  accountUsernameWrap.classList.toggle("hidden", !isBh3);
-  accountUsernameInput.required = isBh3;
-}
-
-function stopOfficialQrPolling() {
-  if (officialQrPollTimer) {
-    clearInterval(officialQrPollTimer);
-    officialQrPollTimer = null;
-  }
-}
-
-function isOfficialQrFinal(state) {
-  return state === "confirmed" || state === "expired" || state === "duplicate" || state === "error" || state === "cancelled";
-}
-
-function renderOfficialQrSession(data) {
-  if (!data || !data.session_id) {
-    officialQrBox.classList.add("hidden");
-    officialQrImage.removeAttribute("src");
-    officialQrStatus.textContent = "等待生成二维码";
-    return;
-  }
-
-  officialQrBox.classList.remove("hidden");
-  if (data.qrcode_image_data_url) {
-    officialQrImage.src = data.qrcode_image_data_url;
-  }
-  officialQrStatus.textContent = data.state_text || data.state || "-";
-}
-
-async function startOfficialQrAccountFlow() {
-  accountServerTypeInput.value = "official";
-  updateAccountFieldsVisibility();
-  const payload = {
-    name: String(accountNameInput.value || "").trim() || null,
-  };
-  const data = await callApi("/api/accounts/official-qr/start", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  officialQrSessionId = String(data.session_id || "");
-  renderOfficialQrSession(data);
-  appendLog("account_qr_start", { session_id: officialQrSessionId }, new Date().toISOString());
-
-  stopOfficialQrPolling();
-  officialQrPollTimer = setInterval(() => {
-    pollOfficialQrAccountFlow().catch((error) => {
-      appendLog("account_qr_poll_error", String(error), new Date().toISOString());
-    });
-  }, 1500);
-}
-
-async function pollOfficialQrAccountFlow() {
-  if (!officialQrSessionId) {
-    return;
-  }
-
-  const data = await callApi(`/api/accounts/official-qr/${officialQrSessionId}/status`, { method: "GET" });
-  renderOfficialQrSession(data);
-
-  if (!isOfficialQrFinal(String(data.state || ""))) {
-    return;
-  }
-
-  stopOfficialQrPolling();
-  appendLog("account_qr_state", { state: data.state, uid: data.uid || null }, new Date().toISOString());
-
-  if (data.state === "confirmed" && data.account && data.account.id) {
-    await refreshAccounts({ autoApplyDefault: false });
-    setSelectedAccount(data.account.id, { apply: true });
-  } else if (data.state === "duplicate" && data.uid) {
-    await refreshAccounts({ autoApplyDefault: false });
-    const exists = accounts.find((item) => String(item.uid || "") === String(data.uid));
-    if (exists) {
-      setSelectedAccount(exists.id, { apply: true });
-    }
-  }
-}
-
-async function cancelOfficialQrAccountFlow() {
-  if (!officialQrSessionId) {
-    renderOfficialQrSession(null);
-    return;
-  }
-  const data = await callApi(`/api/accounts/official-qr/${officialQrSessionId}/cancel`, {
-    method: "POST",
-  });
-  renderOfficialQrSession(data);
-  stopOfficialQrPolling();
-  appendLog("account_qr_cancel", { session_id: officialQrSessionId }, new Date().toISOString());
-  officialQrSessionId = null;
-}
-
-async function createAccount() {
-  const payload = collectAccountPayload();
-  const data = await callApi("/api/accounts", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  accounts = Array.isArray(data.accounts) ? data.accounts : [];
-  defaultAccountId = data.default_account_id || null;
-  if (data.account && data.account.id) {
-    selectedAccountId = data.account.id;
-  }
-  renderAccounts();
-  appendLog("account_saved", { name: payload.name }, new Date().toISOString());
-}
-
-async function updateSelectedAccount() {
-  if (!selectedAccountId) {
-    throw new Error("请先在账号列表中选择要更新的账号");
-  }
-  const payload = collectAccountPayload();
-  const data = await callApi(`/api/accounts/${selectedAccountId}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-  accounts = Array.isArray(data.accounts) ? data.accounts : [];
-  defaultAccountId = data.default_account_id || null;
-  renderAccounts();
-  appendLog("account_updated", { name: payload.name }, new Date().toISOString());
-}
-
-async function deleteSelectedAccount() {
-  if (!selectedAccountId) {
-    throw new Error("请先在账号列表中选择要删除的账号");
-  }
-  const currentId = selectedAccountId;
-  await callApi(`/api/accounts/${currentId}`, { method: "DELETE" });
-  if (selectedAccountId === currentId) {
-    selectedAccountId = null;
-  }
-  await refreshAccounts({ autoApplyDefault: false });
-  appendLog("account_deleted", { id: currentId }, new Date().toISOString());
-}
-
-async function setSelectedAsDefault() {
-  if (!selectedAccountId) {
-    throw new Error("请先在账号列表中选择默认账号");
-  }
-  const data = await callApi(`/api/accounts/${selectedAccountId}/default`, {
-    method: "POST",
-  });
-  accounts = Array.isArray(data.accounts) ? data.accounts : [];
-  defaultAccountId = data.default_account_id || null;
-  renderAccounts();
-  appendLog("account_default_set", { id: selectedAccountId }, new Date().toISOString());
-}
-
-function refreshFrame() {
-  const ts = Date.now();
-  liveFrameImage.src = `/api/monitor/frame?ts=${ts}`;
-}
-
-function startFramePolling() {
-  if (frameTimer) {
-    return;
-  }
-  frameStatus.textContent = "正在拉取实时画面...";
-  refreshFrame();
-  frameTimer = setInterval(refreshFrame, 450);
-}
-
-function stopFramePolling(message) {
-  if (frameTimer) {
-    clearInterval(frameTimer);
-    frameTimer = null;
-  }
-  liveFrameImage.removeAttribute("src");
-  frameStatus.textContent = message;
-}
-
 liveFrameImage.addEventListener("load", () => {
   if (liveFrameImage.naturalWidth > 0 && liveFrameImage.naturalHeight > 0) {
     liveFrameImage.style.aspectRatio = `${liveFrameImage.naturalWidth} / ${liveFrameImage.naturalHeight}`;
@@ -582,25 +594,64 @@ stopButton.addEventListener("click", async () => {
   }
 });
 
-saveAccountButton.addEventListener("click", async () => {
-  saveAccountButton.disabled = true;
-  try {
-    await createAccount();
-  } catch (error) {
-    appendLog("account_save_error", String(error), new Date().toISOString());
-  } finally {
-    saveAccountButton.disabled = false;
+refreshButton.addEventListener("click", refreshStatus);
+platformSelect.addEventListener("change", updateCustomUrlVisibility);
+
+addAccountButton.addEventListener("click", () => {
+  clearManualAccountForm();
+  switchAccountModalTab("manual");
+  openAccountModal("manual");
+});
+
+closeAccountModalButton.addEventListener("click", closeAccountModal);
+accountModalMask.addEventListener("click", closeAccountModal);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !accountModal.classList.contains("hidden")) {
+    closeAccountModal();
   }
 });
 
-updateAccountButton.addEventListener("click", async () => {
-  updateAccountButton.disabled = true;
+tabManualButton.addEventListener("click", () => {
+  switchAccountModalTab("manual");
+});
+
+tabQrButton.addEventListener("click", () => {
+  switchAccountModalTab("qr");
+});
+
+manualAccountServerTypeInput.addEventListener("change", updateManualAccountFieldsVisibility);
+
+saveManualAccountButton.addEventListener("click", async () => {
+  saveManualAccountButton.disabled = true;
   try {
-    await updateSelectedAccount();
+    await createManualAccount();
   } catch (error) {
-    appendLog("account_update_error", String(error), new Date().toISOString());
+    appendLog("account_save_error", String(error), new Date().toISOString());
   } finally {
-    updateAccountButton.disabled = false;
+    saveManualAccountButton.disabled = false;
+  }
+});
+
+scanAddOfficialButton.addEventListener("click", async () => {
+  scanAddOfficialButton.disabled = true;
+  try {
+    await startOfficialQrAccountFlow();
+    await pollOfficialQrAccountFlow();
+  } catch (error) {
+    appendLog("account_qr_start_error", String(error), new Date().toISOString());
+  } finally {
+    scanAddOfficialButton.disabled = false;
+  }
+});
+
+cancelScanOfficialButton.addEventListener("click", async () => {
+  cancelScanOfficialButton.disabled = true;
+  try {
+    await cancelOfficialQrAccountFlow();
+  } catch (error) {
+    appendLog("account_qr_cancel_error", String(error), new Date().toISOString());
+  } finally {
+    cancelScanOfficialButton.disabled = false;
   }
 });
 
@@ -637,35 +688,8 @@ reloadAccountsButton.addEventListener("click", async () => {
   }
 });
 
-scanAddOfficialButton.addEventListener("click", async () => {
-  scanAddOfficialButton.disabled = true;
-  try {
-    await startOfficialQrAccountFlow();
-    await pollOfficialQrAccountFlow();
-  } catch (error) {
-    appendLog("account_qr_start_error", String(error), new Date().toISOString());
-  } finally {
-    scanAddOfficialButton.disabled = false;
-  }
-});
-
-cancelScanOfficialButton.addEventListener("click", async () => {
-  cancelScanOfficialButton.disabled = true;
-  try {
-    await cancelOfficialQrAccountFlow();
-  } catch (error) {
-    appendLog("account_qr_cancel_error", String(error), new Date().toISOString());
-  } finally {
-    cancelScanOfficialButton.disabled = false;
-  }
-});
-
-refreshButton.addEventListener("click", refreshStatus);
-platformSelect.addEventListener("change", updateCustomUrlVisibility);
-accountServerTypeInput.addEventListener("change", updateAccountFieldsVisibility);
-
 updateCustomUrlVisibility();
-updateAccountFieldsVisibility();
+updateManualAccountFieldsVisibility();
 renderOfficialQrSession(null);
 refreshStatus();
 refreshAccounts().catch((error) => {
