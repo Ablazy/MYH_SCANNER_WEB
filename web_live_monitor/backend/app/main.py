@@ -9,13 +9,16 @@ from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDiscon
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from .account_store import AccountStore
 from .monitor_service import LiveMonitorService
-from .schemas import StartMonitorRequest
+from .schemas import AccountUpsertRequest, StartMonitorRequest
 
 APP_ROOT = Path(__file__).resolve().parent
 FRONTEND_DIR = APP_ROOT.parent.parent / "frontend"
+ACCOUNT_FILE = APP_ROOT.parent / "data" / "accounts.json"
 
 service = LiveMonitorService(streamlink_command=os.getenv("STREAMLINK_COMMAND", "streamlink"))
+account_store = AccountStore(ACCOUNT_FILE)
 
 app = FastAPI(
     title="Live Room QR Monitor",
@@ -79,6 +82,47 @@ def start_monitor(request: StartMonitorRequest) -> dict[str, object]:
 @app.post("/api/monitor/stop")
 def stop_monitor() -> dict[str, object]:
     return service.stop_monitor()
+
+
+@app.get("/api/accounts")
+def list_accounts() -> dict[str, object]:
+    return account_store.list_accounts()
+
+
+@app.post("/api/accounts")
+def add_account(request: AccountUpsertRequest) -> dict[str, object]:
+    account = account_store.add_account(request)
+    return {
+        "account": account,
+        **account_store.list_accounts(),
+    }
+
+
+@app.put("/api/accounts/{account_id}")
+def update_account(account_id: str, request: AccountUpsertRequest) -> dict[str, object]:
+    account = account_store.update_account(account_id, request)
+    if account is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    return {
+        "account": account,
+        **account_store.list_accounts(),
+    }
+
+
+@app.delete("/api/accounts/{account_id}")
+def delete_account(account_id: str) -> dict[str, object]:
+    ok = account_store.delete_account(account_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="account not found")
+    return account_store.list_accounts()
+
+
+@app.post("/api/accounts/{account_id}/default")
+def set_default_account(account_id: str) -> dict[str, object]:
+    ok = account_store.set_default_account(account_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="account not found")
+    return account_store.list_accounts()
 
 
 @app.websocket("/ws/events")

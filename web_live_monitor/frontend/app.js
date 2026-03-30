@@ -15,6 +15,9 @@ const usernameWrap = document.getElementById("username-wrap");
 const liveFrameImage = document.getElementById("live-frame");
 const frameStatus = document.getElementById("frame-status");
 const logBox = document.getElementById("event-log");
+const accountNameInput = document.getElementById("account_name");
+const accountsTbody = document.getElementById("accounts-tbody");
+const accountsEmptyTip = document.getElementById("accounts-empty-tip");
 
 const fields = {
   runningBadge: document.getElementById("running-badge"),
@@ -39,10 +42,18 @@ const fields = {
 const startButton = document.getElementById("start-btn");
 const stopButton = document.getElementById("stop-btn");
 const refreshButton = document.getElementById("refresh-btn");
+const saveAccountButton = document.getElementById("save-account-btn");
+const updateAccountButton = document.getElementById("update-account-btn");
+const deleteAccountButton = document.getElementById("delete-account-btn");
+const setDefaultAccountButton = document.getElementById("set-default-account-btn");
+const reloadAccountsButton = document.getElementById("reload-accounts-btn");
 
 let ws = null;
 let wsTimer = null;
 let frameTimer = null;
+let accounts = [];
+let defaultAccountId = null;
+let selectedAccountId = null;
 
 function textOrDash(value) {
   if (value === null || value === undefined || value === "") {
@@ -130,6 +141,111 @@ async function callApi(path, init) {
     throw new Error(data.detail || `HTTP ${response.status}`);
   }
   return data;
+}
+
+function requireValue(value, label) {
+  const result = String(value || "").trim();
+  if (!result) {
+    throw new Error(`${label}不能为空`);
+  }
+  return result;
+}
+
+function collectAccountPayload() {
+  const payload = {
+    name: requireValue(accountNameInput.value, "账号备注"),
+    server_type: String(serverTypeInput.value || "official").trim(),
+    uid: requireValue(uidInput.value, "UID"),
+    token: requireValue(tokenInput.value, "Token"),
+  };
+
+  const username = String(usernameInput.value || "").trim();
+  if (payload.server_type === "bh3_bilibili") {
+    payload.username = requireValue(username, "用户名");
+  } else if (username) {
+    payload.username = username;
+  }
+
+  return payload;
+}
+
+function applyAccountToForm(account) {
+  accountNameInput.value = account.name || "";
+  enableScanLoginInput.checked = true;
+  serverTypeInput.value = account.server_type || "official";
+  uidInput.value = account.uid || "";
+  tokenInput.value = account.token || "";
+  usernameInput.value = account.username || "";
+  updateScanLoginVisibility();
+}
+
+function setSelectedAccount(accountId, { apply = true } = {}) {
+  selectedAccountId = accountId;
+  renderAccounts();
+  const account = accounts.find((item) => item.id === accountId);
+  if (apply && account) {
+    applyAccountToForm(account);
+  }
+}
+
+function renderAccounts() {
+  accountsTbody.innerHTML = "";
+
+  if (!accounts.length) {
+    accountsEmptyTip.style.display = "block";
+    return;
+  }
+
+  accountsEmptyTip.style.display = "none";
+  for (const account of accounts) {
+    const tr = document.createElement("tr");
+    tr.className = "account-row";
+    if (account.id === selectedAccountId) {
+      tr.classList.add("selected");
+    }
+
+    const defaultCell = document.createElement("td");
+    defaultCell.textContent = account.id === defaultAccountId ? "是" : "";
+
+    const nameCell = document.createElement("td");
+    nameCell.textContent = account.name || "-";
+
+    const typeCell = document.createElement("td");
+    typeCell.textContent = account.server_type === "bh3_bilibili" ? "崩坏3 B服" : "官服";
+
+    const uidCell = document.createElement("td");
+    uidCell.textContent = account.uid || "-";
+
+    const updatedCell = document.createElement("td");
+    updatedCell.textContent = formatTime(account.updated_at);
+
+    tr.append(defaultCell, nameCell, typeCell, uidCell, updatedCell);
+    tr.addEventListener("click", () => {
+      setSelectedAccount(account.id, { apply: true });
+    });
+    accountsTbody.append(tr);
+  }
+}
+
+async function refreshAccounts({ autoApplyDefault = true } = {}) {
+  const data = await callApi("/api/accounts", { method: "GET" });
+  accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  defaultAccountId = data.default_account_id || null;
+
+  if (selectedAccountId && !accounts.some((item) => item.id === selectedAccountId)) {
+    selectedAccountId = null;
+  }
+
+  if (!selectedAccountId && autoApplyDefault && defaultAccountId) {
+    selectedAccountId = defaultAccountId;
+    const defaultAccount = accounts.find((item) => item.id === defaultAccountId);
+    if (defaultAccount) {
+      applyAccountToForm(defaultAccount);
+      accountNameInput.value = defaultAccount.name || "";
+    }
+  }
+
+  renderAccounts();
 }
 
 async function refreshStatus() {
@@ -265,6 +381,62 @@ function updateScanLoginVisibility() {
   usernameInput.required = enabled && isBh3;
 }
 
+async function createAccount() {
+  const payload = collectAccountPayload();
+  const data = await callApi("/api/accounts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  defaultAccountId = data.default_account_id || null;
+  if (data.account && data.account.id) {
+    selectedAccountId = data.account.id;
+  }
+  renderAccounts();
+  appendLog("account_saved", { name: payload.name }, new Date().toISOString());
+}
+
+async function updateSelectedAccount() {
+  if (!selectedAccountId) {
+    throw new Error("请先在账号列表中选择要更新的账号");
+  }
+  const payload = collectAccountPayload();
+  const data = await callApi(`/api/accounts/${selectedAccountId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  defaultAccountId = data.default_account_id || null;
+  renderAccounts();
+  appendLog("account_updated", { name: payload.name }, new Date().toISOString());
+}
+
+async function deleteSelectedAccount() {
+  if (!selectedAccountId) {
+    throw new Error("请先在账号列表中选择要删除的账号");
+  }
+  const currentId = selectedAccountId;
+  await callApi(`/api/accounts/${currentId}`, { method: "DELETE" });
+  if (selectedAccountId === currentId) {
+    selectedAccountId = null;
+  }
+  await refreshAccounts({ autoApplyDefault: false });
+  appendLog("account_deleted", { id: currentId }, new Date().toISOString());
+}
+
+async function setSelectedAsDefault() {
+  if (!selectedAccountId) {
+    throw new Error("请先在账号列表中选择默认账号");
+  }
+  const data = await callApi(`/api/accounts/${selectedAccountId}/default`, {
+    method: "POST",
+  });
+  accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  defaultAccountId = data.default_account_id || null;
+  renderAccounts();
+  appendLog("account_default_set", { id: selectedAccountId }, new Date().toISOString());
+}
+
 function refreshFrame() {
   const ts = Date.now();
   liveFrameImage.src = `/api/monitor/frame?ts=${ts}`;
@@ -322,6 +494,61 @@ stopButton.addEventListener("click", async () => {
   }
 });
 
+saveAccountButton.addEventListener("click", async () => {
+  saveAccountButton.disabled = true;
+  try {
+    await createAccount();
+  } catch (error) {
+    appendLog("account_save_error", String(error), new Date().toISOString());
+  } finally {
+    saveAccountButton.disabled = false;
+  }
+});
+
+updateAccountButton.addEventListener("click", async () => {
+  updateAccountButton.disabled = true;
+  try {
+    await updateSelectedAccount();
+  } catch (error) {
+    appendLog("account_update_error", String(error), new Date().toISOString());
+  } finally {
+    updateAccountButton.disabled = false;
+  }
+});
+
+deleteAccountButton.addEventListener("click", async () => {
+  deleteAccountButton.disabled = true;
+  try {
+    await deleteSelectedAccount();
+  } catch (error) {
+    appendLog("account_delete_error", String(error), new Date().toISOString());
+  } finally {
+    deleteAccountButton.disabled = false;
+  }
+});
+
+setDefaultAccountButton.addEventListener("click", async () => {
+  setDefaultAccountButton.disabled = true;
+  try {
+    await setSelectedAsDefault();
+  } catch (error) {
+    appendLog("account_default_error", String(error), new Date().toISOString());
+  } finally {
+    setDefaultAccountButton.disabled = false;
+  }
+});
+
+reloadAccountsButton.addEventListener("click", async () => {
+  reloadAccountsButton.disabled = true;
+  try {
+    await refreshAccounts({ autoApplyDefault: false });
+  } catch (error) {
+    appendLog("account_reload_error", String(error), new Date().toISOString());
+  } finally {
+    reloadAccountsButton.disabled = false;
+  }
+});
+
 refreshButton.addEventListener("click", refreshStatus);
 platformSelect.addEventListener("change", updateCustomUrlVisibility);
 enableScanLoginInput.addEventListener("change", updateScanLoginVisibility);
@@ -330,4 +557,7 @@ serverTypeInput.addEventListener("change", updateScanLoginVisibility);
 updateCustomUrlVisibility();
 updateScanLoginVisibility();
 refreshStatus();
+refreshAccounts().catch((error) => {
+  appendLog("account_init_error", String(error), new Date().toISOString());
+});
 connectWs();

@@ -13,6 +13,7 @@
 - 可选“自动扫码登录”闭环：
   - `official`：自动调用 `scan + confirm`
   - `bh3_bilibili`：自动调用 `scan + v2_login + confirm`
+- 提供账号管理：保存/更新/删除账号、设置默认账号、一键回填到监视配置
 - WebSocket 实时推送事件（启动、解析流成功、识别成功、错误、停止）
 - 前端控制台支持开始/停止监视、查看状态和日志
 
@@ -67,6 +68,11 @@ docker compose up --build
 - `POST /api/monitor/start` 开始监视
 - `POST /api/monitor/stop` 停止监视
 - `WS /ws/events` 事件推送
+- `GET /api/accounts` 查询账号列表
+- `POST /api/accounts` 保存账号
+- `PUT /api/accounts/{account_id}` 更新账号
+- `DELETE /api/accounts/{account_id}` 删除账号
+- `POST /api/accounts/{account_id}/default` 设置默认账号
 
 `POST /api/monitor/start` 示例：
 

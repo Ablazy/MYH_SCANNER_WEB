@@ -87,3 +87,33 @@ class StartMonitorRequest(BaseModel):
             raise ValueError("username is required for bh3_bilibili scan login")
 
         return self
+
+
+class AccountUpsertRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    server_type: Literal["official", "bh3_bilibili"]
+    uid: str = Field(..., min_length=1, max_length=64)
+    token: str = Field(..., min_length=1, max_length=2048)
+    username: str | None = Field(default=None, max_length=128)
+
+    @field_validator("name", "uid", "token")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("field cannot be empty")
+        return value
+
+    @field_validator("username")
+    @classmethod
+    def strip_username(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        return value or None
+
+    @model_validator(mode="after")
+    def validate_server_specific_fields(self) -> "AccountUpsertRequest":
+        if self.server_type == "bh3_bilibili" and not self.username:
+            raise ValueError("username is required for bh3_bilibili account")
+        return self

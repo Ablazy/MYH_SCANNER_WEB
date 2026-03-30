@@ -20,6 +20,38 @@
       </header>
 
       <section class="panel">
+        <h2>账号管理</h2>
+        <div class="account-toolbar">
+          <label class="account-name-input">
+            账号备注
+            <input id="account_name" type="text" placeholder="例如：主号-官服 / B服小号" />
+          </label>
+          <div class="button-row">
+            <button id="save-account-btn" type="button" class="btn btn-primary">保存当前账号</button>
+            <button id="update-account-btn" type="button" class="btn btn-secondary">更新选中账号</button>
+            <button id="set-default-account-btn" type="button" class="btn btn-ghost">设为默认</button>
+            <button id="delete-account-btn" type="button" class="btn btn-ghost">删除选中</button>
+            <button id="reload-accounts-btn" type="button" class="btn btn-ghost">刷新账号</button>
+          </div>
+        </div>
+        <div class="account-table-wrap">
+          <table id="accounts-table" class="account-table">
+            <thead>
+              <tr>
+                <th>默认</th>
+                <th>备注</th>
+                <th>类型</th>
+                <th>UID</th>
+                <th>更新时间</th>
+              </tr>
+            </thead>
+            <tbody id="accounts-tbody"></tbody>
+          </table>
+          <p id="accounts-empty-tip" class="preview-tip">暂无保存账号</p>
+        </div>
+      </section>
+
+      <section class="panel">
         <h2>监视配置</h2>
         <form id="monitor-form" class="form-grid">
           <label>

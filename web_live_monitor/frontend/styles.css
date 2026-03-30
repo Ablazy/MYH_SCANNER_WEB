@@ -172,6 +172,60 @@ select:focus {
   align-items: flex-end;
 }
 
+.account-toolbar {
+  display: grid;
+  gap: 10px;
+}
+
+.account-name-input {
+  max-width: 520px;
+}
+
+.account-table-wrap {
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(116, 180, 220, 0.2);
+  background: rgba(4, 14, 21, 0.65);
+  overflow: auto;
+}
+
+.account-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+
+.account-table th,
+.account-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(116, 180, 220, 0.14);
+  font-size: 13px;
+}
+
+.account-table th {
+  color: #90b8d5;
+  font-weight: 600;
+}
+
+.account-table td {
+  color: #d6eaf8;
+  word-break: break-all;
+}
+
+.account-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.account-row:hover {
+  background: rgba(44, 95, 130, 0.22);
+}
+
+.account-row.selected {
+  background: rgba(36, 133, 182, 0.28);
+}
+
 .btn {
   border: none;
   border-radius: 10px;
@@ -326,7 +380,7 @@ select:focus {
 }
 
 .preview-tip {
-  margin: 8px 0 0;
+  margin: 8px 10px 8px;
   color: #9cc0d8;
   font-size: 13px;
 }
@@ -394,6 +448,10 @@ select:focus {
 
   .btn {
     flex: 1;
+  }
+
+  .account-table {
+    min-width: 520px;
   }
 
   #live-frame {
