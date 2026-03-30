@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shlex
 import shutil
 import subprocess
@@ -13,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import cv2
+import numpy as np
 from fastapi import WebSocket
 
 from .qr_parser import parse_qr_payload
@@ -25,8 +27,138 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class _FFmpegMJPEGReader:
+    def __init__(self, ffmpeg_command: str, stream_url: str) -> None:
+        self._ffmpeg_command = ffmpeg_command
+        self._stream_url = stream_url
+        self._process: subprocess.Popen[bytes] | None = None
+        self._buffer = bytearray()
+
+    def open(self) -> None:
+        args = [
+            *shlex.split(self._ffmpeg_command),
+            "-hide_banner",
+            "-loglevel",
+            "warning",
+            "-fflags",
+            "nobuffer+discardcorrupt",
+            "-flags",
+            "low_delay",
+            "-analyzeduration",
+            "0",
+            "-probesize",
+            "32768",
+            "-rw_timeout",
+            "5000000",
+            "-i",
+            self._stream_url,
+            "-an",
+            "-vf",
+            "fps=24",
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "mjpeg",
+            "-q:v",
+            "6",
+            "pipe:1",
+        ]
+        self._process = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0,
+        )
+        if self._process.stdout is None:
+            raise RuntimeError("ffmpeg stdout is not available")
+        try:
+            os.set_blocking(self._process.stdout.fileno(), False)
+        except OSError:
+            pass
+
+    def read_frame(self, stop_event: threading.Event, timeout_sec: float = 0.25) -> np.ndarray | None:
+        process = self._process
+        if process is None or process.stdout is None:
+            return None
+
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            if stop_event.is_set():
+                return None
+
+            frame_bytes = self._extract_latest_jpeg_from_buffer()
+            if frame_bytes is not None:
+                frame = cv2.imdecode(np.frombuffer(frame_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+                if frame is not None:
+                    return frame
+                continue
+
+            try:
+                chunk = os.read(process.stdout.fileno(), 64 * 1024)
+            except BlockingIOError:
+                chunk = b""
+
+            if chunk:
+                self._buffer.extend(chunk)
+                if len(self._buffer) > 8 * 1024 * 1024:
+                    # keep tail to avoid unbounded growth if stream is malformed
+                    self._buffer = self._buffer[-2 * 1024 * 1024:]
+                continue
+
+            if process.poll() is not None:
+                return None
+
+            time.sleep(0.01)
+
+        return None
+
+    def _extract_latest_jpeg_from_buffer(self) -> bytes | None:
+        latest = None
+        while True:
+            chunk = self._extract_jpeg_from_buffer()
+            if chunk is None:
+                break
+            latest = chunk
+        return latest
+
+    def close(self) -> None:
+        process = self._process
+        if process is None:
+            return
+
+        self._process = None
+        try:
+            process.terminate()
+            process.wait(timeout=2)
+        except Exception:
+            process.kill()
+        finally:
+            self._buffer.clear()
+
+    def _extract_jpeg_from_buffer(self) -> bytes | None:
+        if not self._buffer:
+            return None
+        start = self._buffer.find(b"\xff\xd8")
+        if start < 0:
+            self._buffer.clear()
+            return None
+        end = self._buffer.find(b"\xff\xd9", start + 2)
+        if end < 0:
+            if start > 0:
+                del self._buffer[:start]
+            return None
+        jpeg = bytes(self._buffer[start:end + 2])
+        del self._buffer[:end + 2]
+        return jpeg
+
+
 class LiveMonitorService:
-    def __init__(self, streamlink_command: str = "streamlink") -> None:
+    def __init__(
+        self,
+        streamlink_command: str = "streamlink",
+        ffmpeg_command: str = "ffmpeg",
+        prefer_low_latency: bool = True,
+    ) -> None:
         self._state_lock = threading.Lock()
         self._frame_lock = threading.Lock()
         self._ws_clients: set[WebSocket] = set()
@@ -36,6 +168,8 @@ class LiveMonitorService:
         self._stop_event: threading.Event | None = None
 
         self._streamlink_command = streamlink_command
+        self._ffmpeg_command = ffmpeg_command
+        self._prefer_low_latency = prefer_low_latency
         self._qr_scanner = WeChatQRScanner()
         self._qr_warning_emitted = False
         self._device_id = str(uuid.uuid4())
@@ -48,12 +182,12 @@ class LiveMonitorService:
             "room_id": None,
             "room_url": None,
             "stream_url": None,
+            "stream_decode_backend": None,
             "quality": None,
             "qr_backend": self._qr_scanner.backend_name,
             "qr_model_dir": self._qr_scanner.model_dir,
             "qr_ready": self._qr_scanner.is_ready,
             "qr_error": self._qr_scanner.error_message,
-            "scan_interval_ms": None,
             "auto_stop_on_ticket": True,
             "enable_scan_login": False,
             "server_type": None,
@@ -109,12 +243,12 @@ class LiveMonitorService:
                     "room_id": request.room_id,
                     "room_url": room_url,
                     "stream_url": None,
+                    "stream_decode_backend": None,
                     "quality": request.quality,
                     "qr_backend": self._qr_scanner.backend_name,
                     "qr_model_dir": self._qr_scanner.model_dir,
                     "qr_ready": self._qr_scanner.is_ready,
                     "qr_error": self._qr_scanner.error_message,
-                    "scan_interval_ms": request.scan_interval_ms,
                     "auto_stop_on_ticket": request.auto_stop_on_ticket,
                     "enable_scan_login": request.enable_scan_login,
                     "server_type": request.server_type,
@@ -155,7 +289,6 @@ class LiveMonitorService:
                 "room_id": request.room_id,
                 "room_url": room_url,
                 "quality": request.quality,
-                "scan_interval_ms": request.scan_interval_ms,
                 "enable_scan_login": request.enable_scan_login,
                 "server_type": request.server_type,
             },
@@ -238,6 +371,20 @@ class LiveMonitorService:
         except Exception:
             return []
 
+    def _read_latest_from_capture(self, capture: cv2.VideoCapture, max_drain: int = 2) -> tuple[bool, Any]:
+        ok, frame = capture.read()
+        if not ok or frame is None:
+            return False, None
+
+        for _ in range(max_drain):
+            if not capture.grab():
+                break
+            ok_next, frame_next = capture.retrieve()
+            if not ok_next or frame_next is None:
+                break
+            frame = frame_next
+        return True, frame
+
     def _monitor_worker(
         self,
         request: StartMonitorRequest,
@@ -246,6 +393,7 @@ class LiveMonitorService:
         stop_event: threading.Event,
     ) -> None:
         capture: cv2.VideoCapture | None = None
+        ffmpeg_reader: _FFmpegMJPEGReader | None = None
         seen_payload_at: dict[str, float] = {}
 
         try:
@@ -255,11 +403,53 @@ class LiveMonitorService:
 
             self._emit_event("stream_resolved", {"stream_url": stream_url})
 
-            capture = cv2.VideoCapture(stream_url)
-            if not capture.isOpened():
-                raise RuntimeError("cannot open stream with OpenCV VideoCapture")
+            decode_backend = "opencv"
+            ffmpeg_unavailable_message = None
+            try:
+                ffmpeg_command_args = shlex.split(self._ffmpeg_command)
+            except ValueError:
+                ffmpeg_command_args = []
+            ffmpeg_binary = ffmpeg_command_args[0] if ffmpeg_command_args else "ffmpeg"
+            ffmpeg_exists = os.path.isabs(ffmpeg_binary) or os.path.sep in ffmpeg_binary or shutil.which(ffmpeg_binary) is not None
 
-            self._emit_event("stream_opened", {"session_id": session_id})
+            if self._prefer_low_latency and ffmpeg_exists:
+                try:
+                    ffmpeg_reader = _FFmpegMJPEGReader(
+                        ffmpeg_command=self._ffmpeg_command,
+                        stream_url=stream_url,
+                    )
+                    ffmpeg_reader.open()
+                    decode_backend = "ffmpeg"
+                except Exception as exc:  # noqa: BLE001
+                    ffmpeg_unavailable_message = f"ffmpeg low-latency open failed, fallback to opencv: {exc}"
+                    ffmpeg_reader = None
+            elif self._prefer_low_latency:
+                ffmpeg_unavailable_message = f"ffmpeg command not found: {ffmpeg_binary}"
+
+            if ffmpeg_reader is None:
+                capture = cv2.VideoCapture(stream_url)
+                if not capture.isOpened():
+                    raise RuntimeError("cannot open stream with OpenCV VideoCapture")
+                # Best effort: keep decoder queue short to reduce stale frames.
+                capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+            self._emit_event(
+                "stream_opened",
+                {
+                    "session_id": session_id,
+                    "stream_decode_backend": decode_backend,
+                },
+            )
+            with self._state_lock:
+                self._state["stream_decode_backend"] = decode_backend
+
+            if ffmpeg_unavailable_message:
+                self._emit_event(
+                    "monitor_warning",
+                    {
+                        "message": ffmpeg_unavailable_message,
+                    },
+                )
             if not self._qr_scanner.is_ready and not self._qr_warning_emitted:
                 self._qr_warning_emitted = True
                 self._emit_event(
@@ -270,14 +460,19 @@ class LiveMonitorService:
                     },
                 )
 
-            scan_interval_sec = request.scan_interval_ms / 1000.0
-            last_scan_at = 0.0
             last_preview_encode_at = 0.0
             read_fail_count = 0
 
             while not stop_event.is_set():
-                ok, frame = capture.read()
                 now = time.monotonic()
+                frame = None
+                ok = False
+
+                if ffmpeg_reader is not None:
+                    frame = ffmpeg_reader.read_frame(stop_event=stop_event, timeout_sec=0.25)
+                    ok = frame is not None
+                elif capture is not None:
+                    ok, frame = self._read_latest_from_capture(capture)
 
                 if not ok or frame is None:
                     read_fail_count += 1
@@ -293,10 +488,6 @@ class LiveMonitorService:
                 if now - last_preview_encode_at >= 0.25:
                     self._update_latest_frame(frame)
                     last_preview_encode_at = now
-
-                if now - last_scan_at < scan_interval_sec:
-                    continue
-                last_scan_at = now
 
                 payloads = self._decode_payloads(frame)
                 if not payloads:
@@ -379,6 +570,8 @@ class LiveMonitorService:
             self._emit_event("monitor_error", {"message": message})
 
         finally:
+            if ffmpeg_reader is not None:
+                ffmpeg_reader.close()
             if capture is not None:
                 capture.release()
 

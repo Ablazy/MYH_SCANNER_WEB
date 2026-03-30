@@ -9,7 +9,6 @@ class StartMonitorRequest(BaseModel):
     platform: Literal["bilibili", "douyin", "custom"] = "bilibili"
     room_id: str | None = Field(default=None, max_length=128)
     quality: str = Field(default="best", min_length=1, max_length=32)
-    scan_interval_ms: int = Field(default=500, ge=100, le=5000)
     custom_url: str | None = Field(default=None, max_length=1024)
     auto_stop_on_ticket: bool = True
     enable_scan_login: bool = False

@@ -319,6 +319,7 @@ __pycache__/
 web_live_monitor/backend/.venv/
 .codex
 web_live_monitor/backend/data/accounts.json
+web_live_monitor/backend/bin/
 
 # Cake - Uncomment if you are using it
 # tools/**

@@ -18,7 +18,31 @@ APP_ROOT = Path(__file__).resolve().parent
 FRONTEND_DIR = APP_ROOT.parent.parent / "frontend"
 ACCOUNT_FILE = APP_ROOT.parent / "data" / "accounts.json"
 
-service = LiveMonitorService(streamlink_command=os.getenv("STREAMLINK_COMMAND", "streamlink"))
+
+def _env_flag(name: str, default: bool = True) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _resolve_ffmpeg_command() -> str:
+    configured = os.getenv("FFMPEG_COMMAND")
+    if configured and configured.strip():
+        return configured.strip()
+
+    local_ffmpeg = APP_ROOT.parent / "bin" / "ffmpeg"
+    if local_ffmpeg.exists():
+        return str(local_ffmpeg)
+
+    return "ffmpeg"
+
+
+service = LiveMonitorService(
+    streamlink_command=os.getenv("STREAMLINK_COMMAND", "streamlink"),
+    ffmpeg_command=_resolve_ffmpeg_command(),
+    prefer_low_latency=_env_flag("PREFER_LOW_LATENCY", default=True),
+)
 account_store = AccountStore(ACCOUNT_FILE)
 official_qr_account_service = OfficialQrAccountService(account_store)
 

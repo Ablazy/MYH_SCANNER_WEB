@@ -255,7 +255,6 @@ function getFormPayload() {
     platform: formData.get("platform"),
     room_id: String(formData.get("room_id") || "").trim(),
     quality: String(formData.get("quality") || "best").trim() || "best",
-    scan_interval_ms: Number(formData.get("scan_interval_ms") || 500),
     auto_stop_on_ticket: Boolean(formData.get("auto_stop_on_ticket")),
     enable_scan_login: enableScanLogin,
   };

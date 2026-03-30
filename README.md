@@ -16,6 +16,8 @@
 
 - 支持直播来源：`B站`、`抖音`、`自定义直播页 URL`
 - 使用 `streamlink` 解析真实流地址
+- 默认优先使用 `ffmpeg` 低延迟解码（失败自动回退 OpenCV）
+- 二维码识别采用“按帧扫描 + 最新帧优先”，不使用固定扫描间隔
 - 使用 `OpenCV WeChatQRCode + ScanModel` 识别二维码
 - 解析并提取：
   - `game_code`（`8F3` / `9E&` / `8F%` / `%BA`）
@@ -66,6 +68,8 @@ pip install -r requirements.txt
 ./run.sh
 ```
 
+`run.sh` 默认会在 `backend/bin/ffmpeg` 不存在时自动下载一个可执行 `ffmpeg`（Linux）。
+
 或手动启动：
 
 ```bash
@@ -89,7 +93,21 @@ docker compose up --build
 
 - `STREAMLINK_COMMAND`：自定义 `streamlink` 命令（默认 `streamlink`）
   - 示例：`export STREAMLINK_COMMAND="python3 -m streamlink"`
+- `FFMPEG_COMMAND`：自定义 `ffmpeg` 命令（默认 `ffmpeg`）
+  - 示例：`export FFMPEG_COMMAND="/usr/bin/ffmpeg"`
+- `PREFER_LOW_LATENCY`：是否优先启用 `ffmpeg` 低延迟链路（默认 `1`）
+  - `1`：优先 `ffmpeg`，失败回退 `OpenCV`
+  - `0`：禁用低延迟链路，直接使用 `OpenCV`
+- `AUTO_DOWNLOAD_FFMPEG`：`run.sh` 是否在本地缺失时自动下载 `ffmpeg`（默认 `1`）
+- `FFMPEG_DOWNLOAD_URL`：自定义下载地址（可选，`run.sh` 使用）
 - 账号数据文件：`web_live_monitor/backend/data/accounts.json`
+
+手动下载项目内 ffmpeg：
+
+```bash
+cd web_live_monitor/backend
+./scripts/download_ffmpeg.sh ./bin
+```
 
 ## 接口概览
 
@@ -115,7 +133,6 @@ docker compose up --build
   "platform": "bilibili",
   "room_id": "6",
   "quality": "best",
-  "scan_interval_ms": 500,
   "auto_stop_on_ticket": true,
   "enable_scan_login": true,
   "server_type": "official",
