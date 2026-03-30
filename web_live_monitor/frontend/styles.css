@@ -181,6 +181,25 @@ select:focus {
   max-width: 520px;
 }
 
+.official-qr-box {
+  margin-top: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(116, 180, 220, 0.22);
+  background: rgba(5, 16, 24, 0.74);
+  padding: 10px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+#official-qr-image {
+  width: min(240px, 62vw);
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(120, 190, 230, 0.28);
+  background: #f9fcff;
+}
+
 .account-table-wrap {
   margin-top: 10px;
   border-radius: 10px;

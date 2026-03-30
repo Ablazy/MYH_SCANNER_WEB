@@ -8,6 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from .schemas import AccountUpsertRequest
+from .token_uid import resolve_uid_from_token
+
+
+class AccountStoreError(ValueError):
+    pass
+
+
+class DuplicateAccountError(AccountStoreError):
+    pass
 
 
 def _utc_now_iso() -> str:
@@ -83,12 +92,15 @@ class AccountStore:
     def add_account(self, request: AccountUpsertRequest) -> dict[str, Any]:
         with self._lock:
             data = self._read_json()
+            uid = self._resolve_uid(request)
+            if self._has_uid(data, uid):
+                raise DuplicateAccountError(f"account with uid {uid} already exists")
             now = _utc_now_iso()
             account = {
                 "id": uuid.uuid4().hex,
                 "name": request.name,
                 "server_type": request.server_type,
-                "uid": request.uid,
+                "uid": uid,
                 "token": request.token,
                 "username": request.username,
                 "created_at": now,
@@ -107,13 +119,16 @@ class AccountStore:
     def update_account(self, account_id: str, request: AccountUpsertRequest) -> dict[str, Any] | None:
         with self._lock:
             data = self._read_json()
+            uid = self._resolve_uid(request)
+            if self._has_uid(data, uid, exclude_account_id=account_id):
+                raise DuplicateAccountError(f"account with uid {uid} already exists")
             target: dict[str, Any] | None = None
             for account in data["accounts"]:
                 if account.get("id") != account_id:
                     continue
                 account["name"] = request.name
                 account["server_type"] = request.server_type
-                account["uid"] = request.uid
+                account["uid"] = uid
                 account["token"] = request.token
                 account["username"] = request.username
                 account["updated_at"] = _utc_now_iso()
@@ -158,3 +173,23 @@ class AccountStore:
             data["default_account_id"] = account_id
             self._write_json(data)
             return True
+
+    def _resolve_uid(self, request: AccountUpsertRequest) -> str:
+        try:
+            return resolve_uid_from_token(request.token)
+        except ValueError as exc:
+            raise AccountStoreError(str(exc)) from exc
+
+    def _has_uid(
+        self,
+        data: dict[str, Any],
+        uid: str,
+        *,
+        exclude_account_id: str | None = None,
+    ) -> bool:
+        for account in data["accounts"]:
+            if exclude_account_id and account.get("id") == exclude_account_id:
+                continue
+            if str(account.get("uid", "")).strip() == uid:
+                return True
+        return False

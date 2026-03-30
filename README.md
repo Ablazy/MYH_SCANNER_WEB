@@ -24,6 +24,7 @@
   - `official`：`scan + confirm`
   - `bh3_bilibili`：`scan + v2_login + confirm`
 - 账号管理：保存、更新、删除、设置默认账号，并可回填到监视配置
+- 支持官服“扫码添加账号”（网页展示二维码，手机确认后自动入库）
 - WebSocket 实时事件推送 + 页面实时画面预览
 
 ## 仓库结构
@@ -48,7 +49,7 @@
 
 - Python `3.11+`
 - Linux/macOS（Windows 也可运行，但以下命令以 Unix shell 为例）
-- 依赖包：`fastapi`、`uvicorn`、`opencv-contrib-python`、`streamlink`、`requests`
+- 依赖包：`fastapi`、`uvicorn`、`opencv-contrib-python`、`streamlink`、`requests`、`qrcode`
 - 根目录存在 `ScanModel` 文件：
   - `detect.prototxt`
   - `detect.caffemodel`
@@ -103,6 +104,9 @@ docker compose up --build
 - `PUT /api/accounts/{account_id}`：更新账号
 - `DELETE /api/accounts/{account_id}`：删除账号
 - `POST /api/accounts/{account_id}/default`：设置默认账号
+- `POST /api/accounts/official-qr/start`：开始官服扫码添加
+- `GET /api/accounts/official-qr/{session_id}/status`：查询扫码状态
+- `POST /api/accounts/official-qr/{session_id}/cancel`：取消扫码流程
 
 `POST /api/monitor/start` 示例（官服）：
 

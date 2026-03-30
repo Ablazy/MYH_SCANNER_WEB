@@ -4,20 +4,19 @@ const customUrlWrap = document.getElementById("custom-url-wrap");
 const customUrlInput = document.getElementById("custom_url");
 const roomIdInput = document.getElementById("room_id");
 const enableScanLoginInput = document.getElementById("enable_scan_login");
-const serverTypeInput = document.getElementById("server_type");
-const uidInput = document.getElementById("uid");
-const tokenInput = document.getElementById("token");
-const usernameInput = document.getElementById("username");
-const serverTypeWrap = document.getElementById("server-type-wrap");
-const uidWrap = document.getElementById("uid-wrap");
-const tokenWrap = document.getElementById("token-wrap");
-const usernameWrap = document.getElementById("username-wrap");
+const accountServerTypeInput = document.getElementById("account_server_type");
+const accountTokenInput = document.getElementById("account_token");
+const accountUsernameInput = document.getElementById("account_username");
+const accountUsernameWrap = document.getElementById("account-username-wrap");
 const liveFrameImage = document.getElementById("live-frame");
 const frameStatus = document.getElementById("frame-status");
 const logBox = document.getElementById("event-log");
 const accountNameInput = document.getElementById("account_name");
 const accountsTbody = document.getElementById("accounts-tbody");
 const accountsEmptyTip = document.getElementById("accounts-empty-tip");
+const officialQrBox = document.getElementById("official-qr-box");
+const officialQrImage = document.getElementById("official-qr-image");
+const officialQrStatus = document.getElementById("official-qr-status");
 
 const fields = {
   runningBadge: document.getElementById("running-badge"),
@@ -47,6 +46,8 @@ const updateAccountButton = document.getElementById("update-account-btn");
 const deleteAccountButton = document.getElementById("delete-account-btn");
 const setDefaultAccountButton = document.getElementById("set-default-account-btn");
 const reloadAccountsButton = document.getElementById("reload-accounts-btn");
+const scanAddOfficialButton = document.getElementById("scan-add-official-btn");
+const cancelScanOfficialButton = document.getElementById("cancel-scan-official-btn");
 
 let ws = null;
 let wsTimer = null;
@@ -54,6 +55,8 @@ let frameTimer = null;
 let accounts = [];
 let defaultAccountId = null;
 let selectedAccountId = null;
+let officialQrSessionId = null;
+let officialQrPollTimer = null;
 
 function textOrDash(value) {
   if (value === null || value === undefined || value === "") {
@@ -154,12 +157,11 @@ function requireValue(value, label) {
 function collectAccountPayload() {
   const payload = {
     name: requireValue(accountNameInput.value, "账号备注"),
-    server_type: String(serverTypeInput.value || "official").trim(),
-    uid: requireValue(uidInput.value, "UID"),
-    token: requireValue(tokenInput.value, "Token"),
+    server_type: String(accountServerTypeInput.value || "official").trim(),
+    token: requireValue(accountTokenInput.value, "Token"),
   };
 
-  const username = String(usernameInput.value || "").trim();
+  const username = String(accountUsernameInput.value || "").trim();
   if (payload.server_type === "bh3_bilibili") {
     payload.username = requireValue(username, "用户名");
   } else if (username) {
@@ -171,12 +173,10 @@ function collectAccountPayload() {
 
 function applyAccountToForm(account) {
   accountNameInput.value = account.name || "";
-  enableScanLoginInput.checked = true;
-  serverTypeInput.value = account.server_type || "official";
-  uidInput.value = account.uid || "";
-  tokenInput.value = account.token || "";
-  usernameInput.value = account.username || "";
-  updateScanLoginVisibility();
+  accountServerTypeInput.value = account.server_type || "official";
+  accountTokenInput.value = account.token || "";
+  accountUsernameInput.value = account.username || "";
+  updateAccountFieldsVisibility();
 }
 
 function setSelectedAccount(accountId, { apply = true } = {}) {
@@ -274,10 +274,17 @@ function getFormPayload() {
   }
 
   if (enableScanLogin) {
-    payload.server_type = String(formData.get("server_type") || "").trim();
-    payload.uid = String(formData.get("uid") || "").trim();
-    payload.token = String(formData.get("token") || "").trim();
-    const username = String(formData.get("username") || "").trim();
+    const selectedAccount = accounts.find((item) => item.id === selectedAccountId);
+    if (!selectedAccount) {
+      throw new Error("已启用自动扫码登录，请先在账号管理中选择一个账号");
+    }
+    payload.server_type = String(selectedAccount.server_type || "").trim();
+    payload.uid = String(selectedAccount.uid || "").trim();
+    payload.token = String(selectedAccount.token || "").trim();
+    if (!payload.server_type || !payload.uid || !payload.token) {
+      throw new Error("当前账号登录配置不完整，请在账号管理中补全后再开始监视");
+    }
+    const username = String(selectedAccount.username || "").trim();
     if (username) {
       payload.username = username;
     }
@@ -367,18 +374,99 @@ function updateCustomUrlVisibility() {
   }
 }
 
-function updateScanLoginVisibility() {
-  const enabled = enableScanLoginInput.checked;
-  const isBh3 = serverTypeInput.value === "bh3_bilibili";
+function updateAccountFieldsVisibility() {
+  const isBh3 = accountServerTypeInput.value === "bh3_bilibili";
+  accountUsernameWrap.classList.toggle("hidden", !isBh3);
+  accountUsernameInput.required = isBh3;
+}
 
-  serverTypeWrap.classList.toggle("hidden", !enabled);
-  uidWrap.classList.toggle("hidden", !enabled);
-  tokenWrap.classList.toggle("hidden", !enabled);
-  usernameWrap.classList.toggle("hidden", !(enabled && isBh3));
+function stopOfficialQrPolling() {
+  if (officialQrPollTimer) {
+    clearInterval(officialQrPollTimer);
+    officialQrPollTimer = null;
+  }
+}
 
-  uidInput.required = enabled;
-  tokenInput.required = enabled;
-  usernameInput.required = enabled && isBh3;
+function isOfficialQrFinal(state) {
+  return state === "confirmed" || state === "expired" || state === "duplicate" || state === "error" || state === "cancelled";
+}
+
+function renderOfficialQrSession(data) {
+  if (!data || !data.session_id) {
+    officialQrBox.classList.add("hidden");
+    officialQrImage.removeAttribute("src");
+    officialQrStatus.textContent = "等待生成二维码";
+    return;
+  }
+
+  officialQrBox.classList.remove("hidden");
+  if (data.qrcode_image_data_url) {
+    officialQrImage.src = data.qrcode_image_data_url;
+  }
+  officialQrStatus.textContent = data.state_text || data.state || "-";
+}
+
+async function startOfficialQrAccountFlow() {
+  accountServerTypeInput.value = "official";
+  updateAccountFieldsVisibility();
+  const payload = {
+    name: String(accountNameInput.value || "").trim() || null,
+  };
+  const data = await callApi("/api/accounts/official-qr/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  officialQrSessionId = String(data.session_id || "");
+  renderOfficialQrSession(data);
+  appendLog("account_qr_start", { session_id: officialQrSessionId }, new Date().toISOString());
+
+  stopOfficialQrPolling();
+  officialQrPollTimer = setInterval(() => {
+    pollOfficialQrAccountFlow().catch((error) => {
+      appendLog("account_qr_poll_error", String(error), new Date().toISOString());
+    });
+  }, 1500);
+}
+
+async function pollOfficialQrAccountFlow() {
+  if (!officialQrSessionId) {
+    return;
+  }
+
+  const data = await callApi(`/api/accounts/official-qr/${officialQrSessionId}/status`, { method: "GET" });
+  renderOfficialQrSession(data);
+
+  if (!isOfficialQrFinal(String(data.state || ""))) {
+    return;
+  }
+
+  stopOfficialQrPolling();
+  appendLog("account_qr_state", { state: data.state, uid: data.uid || null }, new Date().toISOString());
+
+  if (data.state === "confirmed" && data.account && data.account.id) {
+    await refreshAccounts({ autoApplyDefault: false });
+    setSelectedAccount(data.account.id, { apply: true });
+  } else if (data.state === "duplicate" && data.uid) {
+    await refreshAccounts({ autoApplyDefault: false });
+    const exists = accounts.find((item) => String(item.uid || "") === String(data.uid));
+    if (exists) {
+      setSelectedAccount(exists.id, { apply: true });
+    }
+  }
+}
+
+async function cancelOfficialQrAccountFlow() {
+  if (!officialQrSessionId) {
+    renderOfficialQrSession(null);
+    return;
+  }
+  const data = await callApi(`/api/accounts/official-qr/${officialQrSessionId}/cancel`, {
+    method: "POST",
+  });
+  renderOfficialQrSession(data);
+  stopOfficialQrPolling();
+  appendLog("account_qr_cancel", { session_id: officialQrSessionId }, new Date().toISOString());
+  officialQrSessionId = null;
 }
 
 async function createAccount() {
@@ -549,13 +637,36 @@ reloadAccountsButton.addEventListener("click", async () => {
   }
 });
 
+scanAddOfficialButton.addEventListener("click", async () => {
+  scanAddOfficialButton.disabled = true;
+  try {
+    await startOfficialQrAccountFlow();
+    await pollOfficialQrAccountFlow();
+  } catch (error) {
+    appendLog("account_qr_start_error", String(error), new Date().toISOString());
+  } finally {
+    scanAddOfficialButton.disabled = false;
+  }
+});
+
+cancelScanOfficialButton.addEventListener("click", async () => {
+  cancelScanOfficialButton.disabled = true;
+  try {
+    await cancelOfficialQrAccountFlow();
+  } catch (error) {
+    appendLog("account_qr_cancel_error", String(error), new Date().toISOString());
+  } finally {
+    cancelScanOfficialButton.disabled = false;
+  }
+});
+
 refreshButton.addEventListener("click", refreshStatus);
 platformSelect.addEventListener("change", updateCustomUrlVisibility);
-enableScanLoginInput.addEventListener("change", updateScanLoginVisibility);
-serverTypeInput.addEventListener("change", updateScanLoginVisibility);
+accountServerTypeInput.addEventListener("change", updateAccountFieldsVisibility);
 
 updateCustomUrlVisibility();
-updateScanLoginVisibility();
+updateAccountFieldsVisibility();
+renderOfficialQrSession(null);
 refreshStatus();
 refreshAccounts().catch((error) => {
   appendLog("account_init_error", String(error), new Date().toISOString());

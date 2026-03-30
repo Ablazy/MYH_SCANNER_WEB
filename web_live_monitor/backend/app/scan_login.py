@@ -10,10 +10,12 @@ from typing import Any
 import requests
 
 MIHOYO_API_SDK = "https://api-sdk.mihoyo.com"
+TAKUMI_API = "https://api-takumi.mihoyo.com"
 BH3_V2_LOGIN_URL = f"{MIHOYO_API_SDK}/bh3_cn/combo/granter/login/v2/login"
 BH3_QR_SCAN_URL = f"{MIHOYO_API_SDK}/bh3_cn/combo/panda/qrcode/scan"
 BH3_QR_CONFIRM_URL = f"{MIHOYO_API_SDK}/bh3_cn/combo/panda/qrcode/confirm"
 BH3_OA_URL = "https://mi-m-cpjgtouitx.cn-hangzhou.fcapp.run"
+TAKUMI_GAME_TOKEN_URL = f"{TAKUMI_API}/auth/api/getGameToken"
 
 BH3_DEVICE_ID = "0000000000000000"
 BH3_SIGN_KEY = "0ebc517adb1b62c6b408df153331f9aa"
@@ -51,6 +53,16 @@ def _post_json(session: requests.Session, url: str, payload: dict[str, Any]) -> 
         url,
         data=_json_dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _get_json(session: requests.Session, url: str, params: dict[str, Any]) -> dict[str, Any]:
+    response = session.get(
+        url,
+        params=params,
         timeout=15,
     )
     response.raise_for_status()
@@ -143,6 +155,83 @@ def _official_scan_confirm(
         "message": "official confirm api success" if confirm_retcode == 0 else "official confirm api failed",
         "retcode": confirm_retcode,
         "response": confirm_data,
+    }
+
+
+def _parse_cookie_like_pairs(token: str) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for chunk in token.split(";"):
+        part = chunk.strip()
+        if not part or "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key:
+            result[key] = value
+    return result
+
+
+def _get_game_token_by_stoken(
+    *,
+    session: requests.Session,
+    stoken: str,
+    mid: str,
+) -> tuple[bool, dict[str, Any]]:
+    data = _get_json(session, TAKUMI_GAME_TOKEN_URL, {"stoken": stoken, "mid": mid})
+    retcode = data.get("retcode", -1)
+    if retcode != 0:
+        return False, {"retcode": retcode, "response": data}
+    game_token = str(data.get("data", {}).get("game_token", "")).strip()
+    if not game_token:
+        return False, {"retcode": retcode, "response": data}
+    return True, {"game_token": game_token}
+
+
+def _resolve_official_game_token(
+    *,
+    session: requests.Session,
+    token: str,
+) -> tuple[bool, dict[str, Any]]:
+    text = token.strip()
+    if not text:
+        return False, {
+            "stage": "prepare",
+            "message": "official token is empty",
+            "retcode": None,
+        }
+
+    pairs = _parse_cookie_like_pairs(text)
+    game_token = pairs.get("game_token")
+    if game_token:
+        return True, {"game_token": game_token}
+
+    stoken = pairs.get("stoken")
+    mid = pairs.get("mid")
+    if stoken:
+        if not mid:
+            return False, {
+                "stage": "prepare",
+                "message": "official stoken token requires mid in cookie",
+                "retcode": None,
+            }
+        ok, info = _get_game_token_by_stoken(session=session, stoken=stoken, mid=mid)
+        if not ok:
+            return False, {
+                "stage": "prepare",
+                "message": "exchange game_token by stoken failed",
+                **info,
+            }
+        return True, {"game_token": info["game_token"]}
+
+    # backward-compatible path: plain token is already game_token
+    if "=" not in text and ";" not in text:
+        return True, {"game_token": text}
+
+    return False, {
+        "stage": "prepare",
+        "message": "official token must be game_token or cookie containing stoken+mid",
+        "retcode": None,
     }
 
 
@@ -280,12 +369,18 @@ def execute_scan_login(
     session = requests.Session()
 
     if server_type == "official":
+        ok, token_info = _resolve_official_game_token(session=session, token=token)
+        if not ok:
+            return {
+                "ok": False,
+                **token_info,
+            }
         return _official_scan_confirm(
             session=session,
             game_code=game_code,
             ticket=ticket,
             uid=uid,
-            game_token=token,
+            game_token=token_info["game_token"],
             device_id=device_id,
         )
 

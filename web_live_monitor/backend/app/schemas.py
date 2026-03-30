@@ -92,11 +92,10 @@ class StartMonitorRequest(BaseModel):
 class AccountUpsertRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
     server_type: Literal["official", "bh3_bilibili"]
-    uid: str = Field(..., min_length=1, max_length=64)
     token: str = Field(..., min_length=1, max_length=2048)
     username: str | None = Field(default=None, max_length=128)
 
-    @field_validator("name", "uid", "token")
+    @field_validator("name", "token")
     @classmethod
     def strip_required_text(cls, value: str) -> str:
         value = value.strip()
@@ -117,3 +116,15 @@ class AccountUpsertRequest(BaseModel):
         if self.server_type == "bh3_bilibili" and not self.username:
             raise ValueError("username is required for bh3_bilibili account")
         return self
+
+
+class OfficialQrStartRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        return value or None

@@ -9,9 +9,10 @@ from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDiscon
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .account_store import AccountStore
+from .account_store import AccountStore, AccountStoreError, DuplicateAccountError
 from .monitor_service import LiveMonitorService
-from .schemas import AccountUpsertRequest, StartMonitorRequest
+from .official_qr_account import OfficialQrAccountService
+from .schemas import AccountUpsertRequest, OfficialQrStartRequest, StartMonitorRequest
 
 APP_ROOT = Path(__file__).resolve().parent
 FRONTEND_DIR = APP_ROOT.parent.parent / "frontend"
@@ -19,6 +20,7 @@ ACCOUNT_FILE = APP_ROOT.parent / "data" / "accounts.json"
 
 service = LiveMonitorService(streamlink_command=os.getenv("STREAMLINK_COMMAND", "streamlink"))
 account_store = AccountStore(ACCOUNT_FILE)
+official_qr_account_service = OfficialQrAccountService(account_store)
 
 app = FastAPI(
     title="Live Room QR Monitor",
@@ -91,7 +93,12 @@ def list_accounts() -> dict[str, object]:
 
 @app.post("/api/accounts")
 def add_account(request: AccountUpsertRequest) -> dict[str, object]:
-    account = account_store.add_account(request)
+    try:
+        account = account_store.add_account(request)
+    except DuplicateAccountError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AccountStoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
         "account": account,
         **account_store.list_accounts(),
@@ -100,7 +107,12 @@ def add_account(request: AccountUpsertRequest) -> dict[str, object]:
 
 @app.put("/api/accounts/{account_id}")
 def update_account(account_id: str, request: AccountUpsertRequest) -> dict[str, object]:
-    account = account_store.update_account(account_id, request)
+    try:
+        account = account_store.update_account(account_id, request)
+    except DuplicateAccountError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AccountStoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if account is None:
         raise HTTPException(status_code=404, detail="account not found")
     return {
@@ -123,6 +135,36 @@ def set_default_account(account_id: str) -> dict[str, object]:
     if not ok:
         raise HTTPException(status_code=404, detail="account not found")
     return account_store.list_accounts()
+
+
+@app.post("/api/accounts/official-qr/start")
+def start_official_qr_login(request: OfficialQrStartRequest) -> dict[str, object]:
+    try:
+        return official_qr_account_service.start_session(name=request.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/accounts/official-qr/{session_id}/status")
+def get_official_qr_login_status(session_id: str) -> dict[str, object]:
+    try:
+        return official_qr_account_service.get_status(session_id)
+    except KeyError as exc:
+        message = str(exc.args[0]) if exc.args else "session not found"
+        raise HTTPException(status_code=404, detail=message) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/accounts/official-qr/{session_id}/cancel")
+def cancel_official_qr_login(session_id: str) -> dict[str, object]:
+    try:
+        return official_qr_account_service.cancel_session(session_id)
+    except KeyError as exc:
+        message = str(exc.args[0]) if exc.args else "session not found"
+        raise HTTPException(status_code=404, detail=message) from exc
 
 
 @app.websocket("/ws/events")
